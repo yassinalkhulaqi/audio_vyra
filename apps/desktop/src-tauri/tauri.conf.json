@@ -1,0 +1,11 @@
+{
+  "productName": "AURIVO",
+  "version": "0.1.0",
+  "identifier": "com.aurivo.desktop",
+  "build": { "frontendDist": "../dist" },
+  "app": {
+    "windows": [{ "title": "AURIVO", "width": 1100, "height": 720 }],
+    "security": { "csp": null }
+  },
+  "bundle": { "active": false }
+}

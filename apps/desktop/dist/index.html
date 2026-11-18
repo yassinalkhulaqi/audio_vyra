@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AURIVO</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#0b0f14; color:#e6edf3; margin:0; padding:24px; }
+  h1 { margin:0 0 16px; }
+  .row { display:flex; gap:12px; align-items:center; margin:12px 0; }
+  select,button,input { padding:8px 12px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#e6edf3; }
+  button { cursor:pointer; }
+  .meter { width:300px; height:12px; background:#21262d; border-radius:6px; overflow:hidden; }
+  .bar { height:100%; width:0%; background:#2ea043; }
+  .status { font-size:14px; color:#8b949e; }
+</style>
+</head>
+<body>
+  <h1>AURIVO</h1>
+  <div class="status" id="status">Stopped</div>
+  <div class="row">
+    <label>Input</label>
+    <select id="input"></select>
+    <label>Output</label>
+    <select id="output"></select>
+  </div>
+  <div class="row">
+    <button id="start">Start</button>
+    <button id="stop">Stop</button>
+    <label>Gain dB</label>
+    <input id="gain" type="range" min="-24" max="24" step="0.5" value="0" />
+    <span id="gainval">0</span>
+  </div>
+  <div class="row">
+    <label>Level</label>
+    <div class="meter"><div class="bar" id="bar"></div></div>
+    <span id="lvl">0.000</span>
+  </div>
+  <script>
+    const invoke = window.__TAURI__.core.invoke;
+    async function refreshDevices() {
+      const ins = await invoke('list_input_devices');
+      const outs = await invoke('list_output_devices');
+      const isel = document.getElementById('input');
+      const osel = document.getElementById('output');
+      isel.innerHTML = ins.map(d=>`<option>${d}</option>`).join('');
+      osel.innerHTML = outs.map(d=>`<option>${d}</option>`).join('');
+    }
+    document.getElementById('start').onclick = async () => {
+      await invoke('start_engine', { input: document.getElementById('input').value, output: document.getElementById('output').value });
+      document.getElementById('status').textContent = 'Running';
+    };
+    document.getElementById('stop').onclick = async () => {
+      await invoke('stop_engine');
+      document.getElementById('status').textContent = 'Stopped';
+    };
+    document.getElementById('gain').oninput = async (e) => {
+      const v = parseFloat(e.target.value);
+      document.getElementById('gainval').textContent = v;
+      await invoke('set_input_gain', { db: v });
+    };
+    setInterval(async () => {
+      try {
+        const l = await invoke('levels');
+        const rms = l.rms || 0;
+        document.getElementById('bar').style.width = Math.min(100, rms*200) + '%';
+        document.getElementById('lvl').textContent = rms.toFixed(3);
+      } catch(e) {}
+    }, 100);
+    refreshDevices();
+  </script>
+</body>
+</html>

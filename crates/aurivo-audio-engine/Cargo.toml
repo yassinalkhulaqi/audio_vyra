@@ -1,0 +1,12 @@
+﻿[package]
+name = "aurivo-audio-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aurivo-core = { path = "../aurivo-core" }
+aurivo-dsp = { path = "../aurivo-dsp" }
+cpal = "0.18"
+ringbuf = "0.4"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
