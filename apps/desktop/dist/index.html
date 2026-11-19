@@ -30,12 +30,20 @@
     <input id="gain" type="range" min="-24" max="24" step="0.5" value="0" />
     <span id="gainval">0</span>
   </div>
-  <div class="row">
-    <label>Level</label>
-    <div class="meter"><div class="bar" id="bar"></div></div>
-    <span id="lvl">0.000</span>
-  </div>
-  <script>
+   <div class="row">
+     <label>Level</label>
+     <div class="meter"><div class="bar" id="bar"></div></div>
+     <span id="lvl">0.000</span>
+   </div>
+   <h2 style="font-size:16px;margin-top:24px;">Modulation</h2>
+   <div class="row"><label>Mode</label>
+     <select id="mo_mode"><option value="0">Chorus</option><option value="1">Flanger</option><option value="2">Phaser</option><option value="3">Vibrato</option></select>
+   </div>
+   <div class="row"><label>Rate</label><input id="mo_rate" type="range" min="0.1" max="12" step="0.1" value="1.5" /><span id="mo_ratev">1.5 Hz</span></div>
+   <div class="row"><label>Depth</label><input id="mo_depth" type="range" min="0" max="1" step="0.01" value="0.4" /><span id="mo_depthv">0.40</span></div>
+   <div class="row"><label>Feedback</label><input id="mo_fb" type="range" min="0" max="0.95" step="0.01" value="0.3" /><span id="mo_fbv">0.30</span></div>
+   <div class="row"><label>Mix</label><input id="mo_mix" type="range" min="0" max="1" step="0.01" value="0.5" /><span id="mo_mixv">0.50</span></div>
+   <script>
     const invoke = window.__TAURI__.core.invoke;
     async function refreshDevices() {
       const ins = await invoke('list_input_devices');
@@ -66,6 +74,27 @@
         document.getElementById('lvl').textContent = rms.toFixed(3);
       } catch(e) {}
     }, 100);
+    let mo = [0, 1.5, 0.4, 0.3, 0.5];
+    function pushMod() { invoke('set_modulation', { mode: mo[0], rate_hz: mo[1], depth: mo[2], feedback: mo[3], mix: mo[4] }); }
+    const moMode = document.getElementById('mo_mode');
+    moMode.onchange = (e) => { mo[0] = parseInt(e.target.value); pushMod(); };
+    [['rate',1,' Hz'],['depth',2,''],['fb',3,''],['mix',4,'']].forEach(([key,i,suffix]) => {
+      const el = document.getElementById('mo_' + key);
+      el.oninput = (e) => {
+        mo[i] = parseFloat(e.target.value);
+        document.getElementById('mo_' + key + 'v').textContent = (suffix === ' Hz' ? mo[i].toFixed(1) + ' Hz' : mo[i].toFixed(2));
+        pushMod();
+      };
+    });
+    (async () => {
+      mo = await invoke('get_modulation');
+      moMode.value = mo[0];
+      [['rate',1,' Hz'],['depth',2,''],['fb',3,''],['mix',4,'']].forEach(([key,i,suffix]) => {
+        const el = document.getElementById('mo_' + key);
+        el.value = mo[i];
+        document.getElementById('mo_' + key + 'v').textContent = (suffix === ' Hz' ? mo[i].toFixed(1) + ' Hz' : mo[i].toFixed(2));
+      });
+    })();
     refreshDevices();
   </script>
 </body>
