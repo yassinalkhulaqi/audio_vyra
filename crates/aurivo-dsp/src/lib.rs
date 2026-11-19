@@ -5,6 +5,7 @@ pub mod compressor;
 pub mod filter;
 pub mod pipeline;
 pub mod pitch;
+pub mod vocal;
 
 pub use gain::Gain;
 pub use meter::LevelMeterProcessor;
@@ -13,3 +14,4 @@ pub use compressor::Compressor;
 pub use filter::{Biquad, BiquadType};
 pub use pipeline::{ProcessingPipeline, AudioProcessor};
 pub use pitch::PitchShifter;
+pub use vocal::{Vocal, VocalParams};
