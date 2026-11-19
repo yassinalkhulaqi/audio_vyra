@@ -1,5 +1,5 @@
 ﻿use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad};
+use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Reverb, ReverbParams};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
 use std::sync::{Arc, Mutex, atomic::{AtomicU32, Ordering}};
@@ -11,6 +11,7 @@ pub struct AudioEngine {
     pipeline: Arc<Mutex<ProcessingPipeline>>,
     meter: Arc<LevelMeterProcessor>,
     gain: Arc<AtomicU32>,
+    reverb: Arc<Mutex<ReverbParams>>,
     running: bool,
     sample_rate: u32,
     channels: u16,
@@ -26,6 +27,8 @@ impl AudioEngine {
         pipeline.add(Box::new(NoiseGate::new(-40.0, 5.0, 50.0, sr as f32)));
         pipeline.add(Box::new(Compressor::new(-18.0, 3.0, 10.0, 100.0, 2.0, sr as f32)));
         pipeline.add(Box::new(Biquad::new_highpass(80.0, 0.707, sr as f32)));
+        let (reverb_proc, reverb_shared) = Reverb::shared(sr);
+        pipeline.add(Box::new(reverb_proc));
         let meter = Arc::new(LevelMeterProcessor::new());
         Self {
             host,
@@ -34,6 +37,7 @@ impl AudioEngine {
             pipeline: Arc::new(Mutex::new(pipeline)),
             meter,
             gain: gain_shared,
+            reverb: reverb_shared,
             running: false,
             sample_rate: sr,
             channels: 1,
@@ -117,5 +121,14 @@ impl AudioEngine {
     pub fn is_running(&self) -> bool { self.running }
     pub fn levels(&self) -> LevelMeter { LevelMeter { peak: self.meter.peak(), rms: self.meter.rms() } }
     pub fn set_input_gain_db(&self, db: f32) { self.gain.store(db.to_bits(), Ordering::Relaxed); }
+
+    pub fn set_reverb(&self, room_size: f32, damp: f32, wet: f32, dry: f32) {
+        Reverb::update(&self.reverb, ReverbParams { room_size, damp, wet, dry });
+    }
+
+    pub fn reverb_params(&self) -> (f32, f32, f32, f32) {
+        let p = Reverb::snapshot(&self.reverb);
+        (p.room_size, p.damp, p.wet, p.dry)
+    }
 }
 

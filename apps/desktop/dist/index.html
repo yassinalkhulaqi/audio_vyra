@@ -30,12 +30,16 @@
     <input id="gain" type="range" min="-24" max="24" step="0.5" value="0" />
     <span id="gainval">0</span>
   </div>
-  <div class="row">
-    <label>Level</label>
-    <div class="meter"><div class="bar" id="bar"></div></div>
-    <span id="lvl">0.000</span>
-  </div>
-  <script>
+   <div class="row">
+     <label>Level</label>
+     <div class="meter"><div class="bar" id="bar"></div></div>
+     <span id="lvl">0.000</span>
+   </div>
+   <h2 style="font-size:16px;margin-top:24px;">Reverb</h2>
+   <div class="row"><label>Room</label><input id="rv_room" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="rv_roomv">0.60</span></div>
+   <div class="row"><label>Damp</label><input id="rv_damp" type="range" min="0" max="1" step="0.01" value="0.4" /><span id="rv_dampv">0.40</span></div>
+   <div class="row"><label>Wet</label><input id="rv_wet" type="range" min="0" max="1" step="0.01" value="0.25" /><span id="rv_wetv">0.25</span></div>
+   <script>
     const invoke = window.__TAURI__.core.invoke;
     async function refreshDevices() {
       const ins = await invoke('list_input_devices');
@@ -66,6 +70,24 @@
         document.getElementById('lvl').textContent = rms.toFixed(3);
       } catch(e) {}
     }, 100);
+    let rv = [0.6, 0.4, 0.25, 0.85];
+    function pushReverb() { invoke('set_reverb', { room_size: rv[0], damp: rv[1], wet: rv[2], dry: rv[3] }); }
+    ['room','damp','wet'].forEach((key, i) => {
+      const el = document.getElementById('rv_' + key);
+      el.oninput = (e) => {
+        rv[i] = parseFloat(e.target.value);
+        document.getElementById('rv_' + key + 'v').textContent = rv[i].toFixed(2);
+        pushReverb();
+      };
+    });
+    (async () => {
+      rv = await invoke('get_reverb');
+      ['room','damp','wet'].forEach((key, i) => {
+        const el = document.getElementById('rv_' + key);
+        el.value = rv[i];
+        document.getElementById('rv_' + key + 'v').textContent = rv[i].toFixed(2);
+      });
+    })();
     refreshDevices();
   </script>
 </body>
