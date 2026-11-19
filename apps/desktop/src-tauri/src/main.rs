@@ -1,7 +1,11 @@
 ﻿#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod presets;
+
 use aurivo_audio_engine::AudioEngine;
 use aurivo_core::LevelMeter;
+use presets::Preset;
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 use tauri::State;
 
@@ -33,12 +37,35 @@ fn levels(state: State<'_, Mutex<AudioEngine>>) -> LevelMeter {
 fn set_input_gain(state: State<'_, Mutex<AudioEngine>>, db: f32) {
     state.lock().unwrap().set_input_gain_db(db)
 }
+#[tauri::command]
+fn list_presets(dir: String) -> Result<Vec<String>, String> {
+    presets::list(&dir).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn save_preset(dir: String, name: String, params: BTreeMap<String, f32>) -> Result<(), String> {
+    presets::save(&dir, &name, params).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn load_preset(dir: String, name: String) -> Result<Preset, String> {
+    presets::load(&dir, &name).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn delete_preset(dir: String, name: String) -> Result<(), String> {
+    presets::delete(&dir, &name).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn apply_preset(state: State<'_, Mutex<AudioEngine>>, params: BTreeMap<String, f32>) {
+    if let Some(&db) = params.get("gain_db") {
+        state.lock().unwrap().set_input_gain_db(db);
+    }
+}
 
 fn main() {
     tauri::Builder::default()
         .manage(Mutex::new(AudioEngine::new()))
         .invoke_handler(tauri::generate_handler![
-            list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain
+            list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
+            list_presets, save_preset, load_preset, delete_preset, apply_preset
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");

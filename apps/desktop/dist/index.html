@@ -30,12 +30,17 @@
     <input id="gain" type="range" min="-24" max="24" step="0.5" value="0" />
     <span id="gainval">0</span>
   </div>
-  <div class="row">
-    <label>Level</label>
-    <div class="meter"><div class="bar" id="bar"></div></div>
-    <span id="lvl">0.000</span>
-  </div>
-  <script>
+   <div class="row">
+     <label>Level</label>
+     <div class="meter"><div class="bar" id="bar"></div></div>
+     <span id="lvl">0.000</span>
+   </div>
+   <h2 style="font-size:16px;margin-top:24px;">Presets</h2>
+   <div class="row"><label>Dir</label><input id="pr_dir" type="text" value="presets" /></div>
+   <div class="row"><label>Name</label><input id="pr_name" type="text" value="My Voice" /><button id="pr_save">Save</button></div>
+   <div class="row"><label>Saved</label><select id="pr_list"></select><button id="pr_load">Load</button><button id="pr_delete">Delete</button></div>
+   <div class="row"><label>Params</label><span id="pr_info" class="status">—</span></div>
+   <script>
     const invoke = window.__TAURI__.core.invoke;
     async function refreshDevices() {
       const ins = await invoke('list_input_devices');
@@ -66,6 +71,36 @@
         document.getElementById('lvl').textContent = rms.toFixed(3);
       } catch(e) {}
     }, 100);
+    const prDir = () => document.getElementById('pr_dir').value;
+    async function refreshPresets() {
+      try {
+        const names = await invoke('list_presets', { dir: prDir() });
+        document.getElementById('pr_list').innerHTML = names.map(n=>`<option>${n}</option>`).join('');
+      } catch(e) {}
+    }
+    document.getElementById('pr_save').onclick = async () => {
+      const params = { gain_db: parseFloat(document.getElementById('gain').value) || 0 };
+      try {
+        await invoke('save_preset', { dir: prDir(), name: document.getElementById('pr_name').value, params });
+        refreshPresets();
+      } catch(e) { alert('Save failed: ' + e); }
+    };
+    document.getElementById('pr_load').onclick = async () => {
+      const name = document.getElementById('pr_list').value;
+      if (!name) return;
+      try {
+        const p = await invoke('load_preset', { dir: prDir(), name });
+        document.getElementById('pr_info').textContent = JSON.stringify(p.params);
+        await invoke('apply_preset', { params: p.params });
+      } catch(e) { alert('Load failed: ' + e); }
+    };
+    document.getElementById('pr_delete').onclick = async () => {
+      const name = document.getElementById('pr_list').value;
+      if (!name) return;
+      try { await invoke('delete_preset', { dir: prDir(), name }); refreshPresets(); }
+      catch(e) { alert('Delete failed: ' + e); }
+    };
+    refreshPresets();
     refreshDevices();
   </script>
 </body>
