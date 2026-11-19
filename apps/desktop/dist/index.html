@@ -39,6 +39,14 @@
    <div class="row"><label>Room</label><input id="rv_room" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="rv_roomv">0.60</span></div>
    <div class="row"><label>Damp</label><input id="rv_damp" type="range" min="0" max="1" step="0.01" value="0.4" /><span id="rv_dampv">0.40</span></div>
    <div class="row"><label>Wet</label><input id="rv_wet" type="range" min="0" max="1" step="0.01" value="0.25" /><span id="rv_wetv">0.25</span></div>
+   <h2 style="font-size:16px;margin-top:24px;">Vocal FX</h2>
+   <div class="row"><label>Mode</label>
+     <select id="vo_mode"><option value="0">Ring mod</option><option value="1">Robot</option><option value="2">Vowel formant</option><option value="3">Tremolo</option></select>
+   </div>
+   <div class="row"><label>Carrier</label><input id="vo_car" type="range" min="1" max="800" step="1" value="40" /><span id="vo_carv">40 Hz</span></div>
+   <div class="row"><label>Vowel</label><input id="vo_vowel" type="range" min="0" max="4" step="0.01" value="0" /><span id="vo_vowelv">A</span></div>
+   <div class="row"><label>Depth</label><input id="vo_depth" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="vo_depthv">0.60</span></div>
+   <div class="row"><label>Mix</label><input id="vo_mix" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="vo_mixv">0.60</span></div>
    <script>
     const invoke = window.__TAURI__.core.invoke;
     async function refreshDevices() {
@@ -86,6 +94,27 @@
         const el = document.getElementById('rv_' + key);
         el.value = rv[i];
         document.getElementById('rv_' + key + 'v').textContent = rv[i].toFixed(2);
+    let vo = [0, 40, 0, 0.6, 0.6];
+    const vowels = ['A','E','I','O','U'];
+    function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
+    const voMode = document.getElementById('vo_mode');
+    voMode.onchange = (e) => { vo[0] = parseInt(e.target.value); pushVocal(); };
+    const vowelFmt = (v) => vowels[Math.round(v)] || 'A';
+    [['car',1,' Hz'],['vowel',2,'v'],['depth',3,''],['mix',4,'']].forEach(([key,i,suffix]) => {
+      const el = document.getElementById('vo_' + key);
+      el.oninput = (e) => {
+        vo[i] = parseFloat(e.target.value);
+        document.getElementById('vo_' + key + 'v').textContent = suffix === 'v' ? vowelFmt(vo[i]) : (suffix === ' Hz' ? vo[i] + ' Hz' : vo[i].toFixed(2));
+        pushVocal();
+      };
+    });
+    (async () => {
+      vo = await invoke('get_vocal');
+      voMode.value = vo[0];
+      [['car',1,' Hz'],['vowel',2,'v'],['depth',3,''],['mix',4,'']].forEach(([key,i,suffix]) => {
+        const el = document.getElementById('vo_' + key);
+        el.value = vo[i];
+        document.getElementById('vo_' + key + 'v').textContent = suffix === 'v' ? vowelFmt(vo[i]) : (suffix === ' Hz' ? vo[i] + ' Hz' : vo[i].toFixed(2));
       });
     })();
     refreshDevices();
