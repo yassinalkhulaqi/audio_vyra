@@ -1,8 +1,19 @@
 ﻿use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad};
+use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, ParametricEq, EqBand, EqFilterKind, EqParams};
+use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
+use serde::Serialize;
 use std::sync::{Arc, Mutex, atomic::{AtomicU32, Ordering}};
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EqBandInfo {
+    pub kind: i32,
+    pub frequency: f32,
+    pub q: f32,
+    pub gain_db: f32,
+    pub enabled: bool,
+}
 
 pub struct AudioEngine {
     host: cpal::Host,
@@ -11,6 +22,7 @@ pub struct AudioEngine {
     pipeline: Arc<Mutex<ProcessingPipeline>>,
     meter: Arc<LevelMeterProcessor>,
     gain: Arc<AtomicU32>,
+    eq: Arc<Mutex<EqParams>>,
     running: bool,
     sample_rate: u32,
     channels: u16,
@@ -26,6 +38,8 @@ impl AudioEngine {
         pipeline.add(Box::new(NoiseGate::new(-40.0, 5.0, 50.0, sr as f32)));
         pipeline.add(Box::new(Compressor::new(-18.0, 3.0, 10.0, 100.0, 2.0, sr as f32)));
         pipeline.add(Box::new(Biquad::new_highpass(80.0, 0.707, sr as f32)));
+        let (eq_proc, eq_shared) = ParametricEq::shared(sr);
+        pipeline.add(Box::new(eq_proc));
         let meter = Arc::new(LevelMeterProcessor::new());
         Self {
             host,
@@ -34,6 +48,7 @@ impl AudioEngine {
             pipeline: Arc::new(Mutex::new(pipeline)),
             meter,
             gain: gain_shared,
+            eq: eq_shared,
             running: false,
             sample_rate: sr,
             channels: 1,
@@ -117,5 +132,42 @@ impl AudioEngine {
     pub fn is_running(&self) -> bool { self.running }
     pub fn levels(&self) -> LevelMeter { LevelMeter { peak: self.meter.peak(), rms: self.meter.rms() } }
     pub fn set_input_gain_db(&self, db: f32) { self.gain.store(db.to_bits(), Ordering::Relaxed); }
+
+    pub fn set_eq_band(&self, index: usize, kind: i32, frequency: f32, q: f32, gain_db: f32, enabled: bool) {
+        eq_ops::set_band(&self.eq, index, EqBand {
+            kind: EqFilterKind::from_i32(kind),
+            frequency,
+            q,
+            gain_db,
+            enabled,
+        });
+    }
+
+    pub fn add_eq_band(&self, kind: i32, frequency: f32, q: f32, gain_db: f32) {
+        eq_ops::add_band(&self.eq, EqBand {
+            kind: EqFilterKind::from_i32(kind),
+            frequency,
+            q,
+            gain_db,
+            enabled: true,
+        });
+    }
+
+    pub fn remove_eq_band(&self, index: usize) {
+        eq_ops::remove_band(&self.eq, index);
+    }
+
+    pub fn eq_bands(&self) -> Vec<EqBandInfo> {
+        eq_ops::snapshot(&self.eq)
+            .into_iter()
+            .map(|b| EqBandInfo {
+                kind: b.kind.as_i32(),
+                frequency: b.frequency,
+                q: b.q,
+                gain_db: b.gain_db,
+                enabled: b.enabled,
+            })
+            .collect()
+    }
 }
 
