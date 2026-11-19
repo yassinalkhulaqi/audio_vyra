@@ -26,6 +26,7 @@ use crate::gate::NoiseGate;
 use crate::compressor::Compressor;
 use crate::filter::Biquad;
 use crate::eq::ParametricEq;
+use crate::vocal::Vocal;
 
 impl AudioProcessor for Gain {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Gain::process(self, samples); }
@@ -51,4 +52,9 @@ impl AudioProcessor for ParametricEq {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { ParametricEq::process(self, samples); }
     fn bypass(&self) -> bool { ParametricEq::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { ParametricEq::set_bypass(self, b); }
+}
+impl AudioProcessor for Vocal {
+    fn process(&mut self, samples: &mut [f32], _sr: u32) { Vocal::process(self, samples); }
+    fn bypass(&self) -> bool { Vocal::is_bypassed(self) }
+    fn set_bypass(&mut self, b: bool) { Vocal::set_bypass(self, b); }
 }

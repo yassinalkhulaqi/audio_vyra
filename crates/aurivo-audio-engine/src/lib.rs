@@ -1,5 +1,5 @@
 ﻿use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, ParametricEq, EqBand, EqFilterKind, EqParams};
+use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, ParametricEq, EqBand, EqFilterKind, EqParams, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
@@ -23,6 +23,7 @@ pub struct AudioEngine {
     meter: Arc<LevelMeterProcessor>,
     gain: Arc<AtomicU32>,
     eq: Arc<Mutex<EqParams>>,
+    vocal: Arc<Mutex<VocalParams>>,
     running: bool,
     sample_rate: u32,
     channels: u16,
@@ -40,6 +41,8 @@ impl AudioEngine {
         pipeline.add(Box::new(Biquad::new_highpass(80.0, 0.707, sr as f32)));
         let (eq_proc, eq_shared) = ParametricEq::shared(sr);
         pipeline.add(Box::new(eq_proc));
+        let (vocal_proc, vocal_shared) = Vocal::shared(sr);
+        pipeline.add(Box::new(vocal_proc));
         let meter = Arc::new(LevelMeterProcessor::new());
         Self {
             host,
@@ -49,6 +52,7 @@ impl AudioEngine {
             meter,
             gain: gain_shared,
             eq: eq_shared,
+            vocal: vocal_shared,
             running: false,
             sample_rate: sr,
             channels: 1,
@@ -168,6 +172,15 @@ impl AudioEngine {
                 enabled: b.enabled,
             })
             .collect()
+    }
+
+    pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
+        Vocal::update(&self.vocal, VocalParams { mode, carrier_hz, vowel, depth, mix });
+    }
+
+    pub fn vocal_params(&self) -> (i32, f32, f32, f32, f32) {
+        let p = Vocal::snapshot(&self.vocal);
+        (p.mode, p.carrier_hz, p.vowel, p.depth, p.mix)
     }
 }
 
