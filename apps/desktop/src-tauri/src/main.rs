@@ -33,12 +33,21 @@ fn levels(state: State<'_, Mutex<AudioEngine>>) -> LevelMeter {
 fn set_input_gain(state: State<'_, Mutex<AudioEngine>>, db: f32) {
     state.lock().unwrap().set_input_gain_db(db)
 }
+#[tauri::command]
+fn set_pitch(state: State<'_, Mutex<AudioEngine>>, semitones: f32) {
+    state.lock().unwrap().set_pitch_semitones(semitones)
+}
+#[tauri::command]
+fn get_pitch(state: State<'_, Mutex<AudioEngine>>) -> f32 {
+    state.lock().unwrap().pitch_semitones()
+}
 
 fn main() {
     tauri::Builder::default()
         .manage(Mutex::new(AudioEngine::new()))
         .invoke_handler(tauri::generate_handler![
-            list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain
+            list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
+            set_pitch, get_pitch
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");

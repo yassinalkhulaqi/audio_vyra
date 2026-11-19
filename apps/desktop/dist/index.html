@@ -30,12 +30,17 @@
     <input id="gain" type="range" min="-24" max="24" step="0.5" value="0" />
     <span id="gainval">0</span>
   </div>
-  <div class="row">
-    <label>Level</label>
-    <div class="meter"><div class="bar" id="bar"></div></div>
-    <span id="lvl">0.000</span>
-  </div>
-  <script>
+   <div class="row">
+     <label>Level</label>
+     <div class="meter"><div class="bar" id="bar"></div></div>
+     <span id="lvl">0.000</span>
+   </div>
+   <div class="row">
+     <label>Pitch</label>
+     <input id="pitch" type="range" min="-24" max="24" step="1" value="0" />
+     <span id="pitchval">0 st</span>
+   </div>
+   <script>
     const invoke = window.__TAURI__.core.invoke;
     async function refreshDevices() {
       const ins = await invoke('list_input_devices');
@@ -66,6 +71,17 @@
         document.getElementById('lvl').textContent = rms.toFixed(3);
       } catch(e) {}
     }, 100);
+    const pitch = document.getElementById('pitch');
+    pitch.oninput = async (e) => {
+      const v = parseFloat(e.target.value);
+      document.getElementById('pitchval').textContent = v + ' st';
+      await invoke('set_pitch', { semitones: v });
+    };
+    (async () => {
+      const v = await invoke('get_pitch');
+      pitch.value = v;
+      document.getElementById('pitchval').textContent = v + ' st';
+    })();
     refreshDevices();
   </script>
 </body>
