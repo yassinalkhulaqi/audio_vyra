@@ -1,8 +1,8 @@
 ﻿use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad};
+use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, SpectrumAnalyzer};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
-use std::sync::{Arc, Mutex, atomic::{AtomicU32, Ordering}};
+use std::sync::{Arc, Mutex, atomic::{AtomicU32, AtomicBool, Ordering}};
 
 pub struct AudioEngine {
     host: cpal::Host,
@@ -11,6 +11,10 @@ pub struct AudioEngine {
     pipeline: Arc<Mutex<ProcessingPipeline>>,
     meter: Arc<LevelMeterProcessor>,
     gain: Arc<AtomicU32>,
+    analyzer: Arc<Mutex<SpectrumAnalyzer>>,
+    spectrum: Arc<Mutex<Vec<f32>>>,
+    output_gain: Arc<AtomicU32>,
+    output_muted: Arc<AtomicBool>,
     running: bool,
     sample_rate: u32,
     channels: u16,
@@ -27,6 +31,10 @@ impl AudioEngine {
         pipeline.add(Box::new(Compressor::new(-18.0, 3.0, 10.0, 100.0, 2.0, sr as f32)));
         pipeline.add(Box::new(Biquad::new_highpass(80.0, 0.707, sr as f32)));
         let meter = Arc::new(LevelMeterProcessor::new());
+        let (analyzer, spectrum_handle) = SpectrumAnalyzer::shared(1024);
+        let analyzer = Arc::new(Mutex::new(analyzer));
+        let output_gain = Arc::new(AtomicU32::new(1.0f32.to_bits()));
+        let output_muted = Arc::new(AtomicBool::new(false));
         Self {
             host,
             input_stream: None,
@@ -34,6 +42,10 @@ impl AudioEngine {
             pipeline: Arc::new(Mutex::new(pipeline)),
             meter,
             gain: gain_shared,
+            analyzer,
+            spectrum: spectrum_handle,
+            output_gain,
+            output_muted,
             running: false,
             sample_rate: sr,
             channels: 1,
@@ -75,23 +87,32 @@ impl AudioEngine {
 
         let pipeline = self.pipeline.clone();
         let meter = self.meter.clone();
+        let analyzer = self.analyzer.clone();
         let in_stream = input_dev.build_input_stream(
             in_cfg.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
                 let mut buf = data.to_vec();
                 if let Ok(mut p) = pipeline.try_lock() { p.process(&mut buf); }
                 meter.process(&buf);
+                if let Ok(mut a) = analyzer.try_lock() { a.push(&buf); }
                 let _ = prod.push_slice(&buf);
             },
             |err| eprintln!("input stream error: {err}"),
             None,
         ).map_err(|e| AurivoError::Stream(e.to_string()))?;
 
+        let output_gain = self.output_gain.clone();
+        let output_muted = self.output_muted.clone();
         let out_stream = output_dev.build_output_stream(
             out_cfg.into(),
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                 let n = cons.pop_slice(data);
                 if n < data.len() { data[n..].fill(0.0); }
+                let muted = output_muted.load(Ordering::Relaxed);
+                let gain = f32::from_bits(output_gain.load(Ordering::Relaxed));
+                for s in data.iter_mut() {
+                    if muted { *s = 0.0; } else { *s *= gain; }
+                }
             },
             |err| eprintln!("output stream error: {err}"),
             None,
@@ -117,5 +138,25 @@ impl AudioEngine {
     pub fn is_running(&self) -> bool { self.running }
     pub fn levels(&self) -> LevelMeter { LevelMeter { peak: self.meter.peak(), rms: self.meter.rms() } }
     pub fn set_input_gain_db(&self, db: f32) { self.gain.store(db.to_bits(), Ordering::Relaxed); }
+
+    pub fn spectrum(&self) -> Vec<f32> {
+        SpectrumAnalyzer::snapshot(&self.spectrum)
+    }
+
+    pub fn set_output_gain_db(&self, db: f32) {
+        self.output_gain.store(10f32.powf(db / 20.0).to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn output_gain_db(&self) -> f32 {
+        20.0 * f32::from_bits(self.output_gain.load(Ordering::Relaxed)).log10()
+    }
+
+    pub fn set_output_muted(&self, muted: bool) {
+        self.output_muted.store(muted, Ordering::Relaxed);
+    }
+
+    pub fn is_output_muted(&self) -> bool {
+        self.output_muted.load(Ordering::Relaxed)
+    }
 }
 

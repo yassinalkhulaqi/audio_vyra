@@ -33,12 +33,33 @@ fn levels(state: State<'_, Mutex<AudioEngine>>) -> LevelMeter {
 fn set_input_gain(state: State<'_, Mutex<AudioEngine>>, db: f32) {
     state.lock().unwrap().set_input_gain_db(db)
 }
+#[tauri::command]
+fn spectrum(state: State<'_, Mutex<AudioEngine>>) -> Vec<f32> {
+    state.lock().unwrap().spectrum()
+}
+#[tauri::command]
+fn set_output_gain(state: State<'_, Mutex<AudioEngine>>, db: f32) {
+    state.lock().unwrap().set_output_gain_db(db)
+}
+#[tauri::command]
+fn get_output_gain(state: State<'_, Mutex<AudioEngine>>) -> f32 {
+    state.lock().unwrap().output_gain_db()
+}
+#[tauri::command]
+fn set_output_muted(state: State<'_, Mutex<AudioEngine>>, muted: bool) {
+    state.lock().unwrap().set_output_muted(muted)
+}
+#[tauri::command]
+fn is_output_muted(state: State<'_, Mutex<AudioEngine>>) -> bool {
+    state.lock().unwrap().is_output_muted()
+}
 
 fn main() {
     tauri::Builder::default()
         .manage(Mutex::new(AudioEngine::new()))
         .invoke_handler(tauri::generate_handler![
-            list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain
+            list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
+            spectrum, set_output_gain, get_output_gain, set_output_muted, is_output_muted
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");
