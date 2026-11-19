@@ -33,12 +33,41 @@ fn levels(state: State<'_, Mutex<AudioEngine>>) -> LevelMeter {
 fn set_input_gain(state: State<'_, Mutex<AudioEngine>>, db: f32) {
     state.lock().unwrap().set_input_gain_db(db)
 }
+#[tauri::command]
+fn start_recording(state: State<'_, Mutex<AudioEngine>>) {
+    state.lock().unwrap().start_recording()
+}
+#[tauri::command]
+fn stop_recording(state: State<'_, Mutex<AudioEngine>>) {
+    state.lock().unwrap().stop_recording()
+}
+#[tauri::command]
+fn is_recording(state: State<'_, Mutex<AudioEngine>>) -> bool {
+    state.lock().unwrap().is_recording()
+}
+#[tauri::command]
+fn recorded_samples(state: State<'_, Mutex<AudioEngine>>) -> usize {
+    state.lock().unwrap().recorded_samples()
+}
+#[tauri::command]
+fn save_recording(state: State<'_, Mutex<AudioEngine>>, path: String) -> Result<(), String> {
+    state.lock().unwrap().save_recording(&path).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn play_wav(state: State<'_, Mutex<AudioEngine>>, path: String) -> Result<(), String> {
+    state.lock().unwrap().play_wav(&path).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn stop_playback(state: State<'_, Mutex<AudioEngine>>) {
+    state.lock().unwrap().stop_playback()
+}
 
 fn main() {
     tauri::Builder::default()
         .manage(Mutex::new(AudioEngine::new()))
         .invoke_handler(tauri::generate_handler![
-            list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain
+            list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
+            start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");

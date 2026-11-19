@@ -1,4 +1,7 @@
-﻿use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
+﻿pub mod recorder;
+
+use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
+use recorder::{RecorderState, read_wav, write_wav};
 use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
@@ -11,6 +14,8 @@ pub struct AudioEngine {
     pipeline: Arc<Mutex<ProcessingPipeline>>,
     meter: Arc<LevelMeterProcessor>,
     gain: Arc<AtomicU32>,
+    recorder: Arc<Mutex<RecorderState>>,
+    playback_stream: Option<cpal::Stream>,
     running: bool,
     sample_rate: u32,
     channels: u16,
@@ -27,6 +32,7 @@ impl AudioEngine {
         pipeline.add(Box::new(Compressor::new(-18.0, 3.0, 10.0, 100.0, 2.0, sr as f32)));
         pipeline.add(Box::new(Biquad::new_highpass(80.0, 0.707, sr as f32)));
         let meter = Arc::new(LevelMeterProcessor::new());
+        let recorder = Arc::new(Mutex::new(RecorderState::new(sr, 1)));
         Self {
             host,
             input_stream: None,
@@ -34,6 +40,8 @@ impl AudioEngine {
             pipeline: Arc::new(Mutex::new(pipeline)),
             meter,
             gain: gain_shared,
+            recorder,
+            playback_stream: None,
             running: false,
             sample_rate: sr,
             channels: 1,
@@ -75,12 +83,14 @@ impl AudioEngine {
 
         let pipeline = self.pipeline.clone();
         let meter = self.meter.clone();
+        let recorder = self.recorder.clone();
         let in_stream = input_dev.build_input_stream(
             in_cfg.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
                 let mut buf = data.to_vec();
                 if let Ok(mut p) = pipeline.try_lock() { p.process(&mut buf); }
                 meter.process(&buf);
+                if let Ok(mut rec) = recorder.lock() { rec.push(&buf); }
                 let _ = prod.push_slice(&buf);
             },
             |err| eprintln!("input stream error: {err}"),
@@ -117,5 +127,64 @@ impl AudioEngine {
     pub fn is_running(&self) -> bool { self.running }
     pub fn levels(&self) -> LevelMeter { LevelMeter { peak: self.meter.peak(), rms: self.meter.rms() } }
     pub fn set_input_gain_db(&self, db: f32) { self.gain.store(db.to_bits(), Ordering::Relaxed); }
+
+    pub fn start_recording(&self) {
+        if let Ok(mut rec) = self.recorder.lock() { rec.start(); }
+    }
+
+    pub fn stop_recording(&self) {
+        if let Ok(mut rec) = self.recorder.lock() { rec.stop(); }
+    }
+
+    pub fn is_recording(&self) -> bool {
+        self.recorder.lock().map(|r| r.recording).unwrap_or(false)
+    }
+
+    pub fn recorded_samples(&self) -> usize {
+        self.recorder.lock().map(|r| r.samples.len()).unwrap_or(0)
+    }
+
+    pub fn save_recording(&self, path: &str) -> Result<()> {
+        let rec = self.recorder.lock().map_err(|_| AurivoError::InvalidConfig("recorder lock poisoned".into()))?;
+        let sr = if rec.sample_rate > 0 { rec.sample_rate } else { self.sample_rate };
+        write_wav(path, &rec.samples, sr, rec.channels)?;
+        Ok(())
+    }
+
+    pub fn play_wav(&mut self, path: &str) -> Result<()> {
+        self.playback_stream = None;
+        let decoded = read_wav(path)?;
+        let device = self.host.default_output_device().ok_or_else(|| AurivoError::DeviceNotFound("output".into()))?;
+        let cfg = device.default_output_config().map_err(|e| AurivoError::Stream(e.to_string()))?;
+        if cfg.sample_format() != cpal::SampleFormat::F32 {
+            return Err(AurivoError::Stream("output device does not support f32".into()));
+        }
+        let state = Arc::new(Mutex::new((decoded.samples, 0usize)));
+        let stream = device.build_output_stream(
+            cfg.into(),
+            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                if let Ok(mut guard) = state.lock() {
+                    let (samples, index) = &mut *guard;
+                    for d in data.iter_mut() {
+                        if *index < samples.len() {
+                            *d = samples[*index];
+                            *index += 1;
+                        } else {
+                            *d = 0.0;
+                        }
+                    }
+                }
+            },
+            |err| eprintln!("playback stream error: {err}"),
+            None,
+        ).map_err(|e| AurivoError::Stream(e.to_string()))?;
+        stream.play().map_err(|e| AurivoError::Stream(e.to_string()))?;
+        self.playback_stream = Some(stream);
+        Ok(())
+    }
+
+    pub fn stop_playback(&mut self) {
+        self.playback_stream = None;
+    }
 }
 
