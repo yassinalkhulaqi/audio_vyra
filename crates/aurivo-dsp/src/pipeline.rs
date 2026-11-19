@@ -1,4 +1,4 @@
-﻿pub trait AudioProcessor: Send {
+pub trait AudioProcessor: Send {
     fn process(&mut self, samples: &mut [f32], sample_rate: u32);
     fn bypass(&self) -> bool { false }
     fn set_bypass(&mut self, _b: bool) {}
@@ -26,6 +26,7 @@ use crate::gate::NoiseGate;
 use crate::compressor::Compressor;
 use crate::filter::Biquad;
 use crate::modulation::Modulation;
+use crate::vocal::Vocal;
 
 impl AudioProcessor for Gain {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Gain::process(self, samples); }
@@ -51,4 +52,9 @@ impl AudioProcessor for Modulation {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Modulation::process(self, samples); }
     fn bypass(&self) -> bool { Modulation::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { Modulation::set_bypass(self, b); }
+}
+impl AudioProcessor for Vocal {
+    fn process(&mut self, samples: &mut [f32], _sr: u32) { Vocal::process(self, samples); }
+    fn bypass(&self) -> bool { Vocal::is_bypassed(self) }
+    fn set_bypass(&mut self, b: bool) { Vocal::set_bypass(self, b); }
 }
