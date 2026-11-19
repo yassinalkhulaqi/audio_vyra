@@ -30,12 +30,19 @@
     <input id="gain" type="range" min="-24" max="24" step="0.5" value="0" />
     <span id="gainval">0</span>
   </div>
-  <div class="row">
-    <label>Level</label>
-    <div class="meter"><div class="bar" id="bar"></div></div>
-    <span id="lvl">0.000</span>
-  </div>
-  <script>
+   <div class="row">
+     <label>Level</label>
+     <div class="meter"><div class="bar" id="bar"></div></div>
+     <span id="lvl">0.000</span>
+   </div>
+   <h2 style="font-size:16px;margin-top:24px;">Distortion</h2>
+   <div class="row"><label>Mode</label>
+     <select id="ds_mode"><option value="0">Soft (tanh)</option><option value="1">Hard clip</option><option value="2">Fuzz</option></select>
+   </div>
+   <div class="row"><label>Drive</label><input id="ds_drive" type="range" min="-12" max="48" step="1" value="12" /><span id="ds_drivev">12 dB</span></div>
+   <div class="row"><label>Tone</label><input id="ds_tone" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="ds_tonev">0.60</span></div>
+   <div class="row"><label>Mix</label><input id="ds_mix" type="range" min="0" max="1" step="0.01" value="0.5" /><span id="ds_mixv">0.50</span></div>
+   <script>
     const invoke = window.__TAURI__.core.invoke;
     async function refreshDevices() {
       const ins = await invoke('list_input_devices');
@@ -66,6 +73,27 @@
         document.getElementById('lvl').textContent = rms.toFixed(3);
       } catch(e) {}
     }, 100);
+    let ds = [0, 12, 0.6, 0.5, 1, 8];
+    function pushDist() { invoke('set_distortion', { mode: ds[0], drive_db: ds[1], tone: ds[2], mix: ds[3], downsample: ds[4], bit_depth: ds[5] }); }
+    const dsMode = document.getElementById('ds_mode');
+    dsMode.onchange = (e) => { ds[0] = parseInt(e.target.value); pushDist(); };
+    [['drive',1,' dB'],['tone',2,''],['mix',3,'']].forEach(([key,i,suffix]) => {
+      const el = document.getElementById('ds_' + key);
+      el.oninput = (e) => {
+        ds[i] = parseFloat(e.target.value);
+        document.getElementById('ds_' + key + 'v').textContent = (suffix === ' dB' ? ds[i] + ' dB' : ds[i].toFixed(2));
+        pushDist();
+      };
+    });
+    (async () => {
+      ds = await invoke('get_distortion');
+      dsMode.value = ds[0];
+      [['drive',1,' dB'],['tone',2,''],['mix',3,'']].forEach(([key,i,suffix]) => {
+        const el = document.getElementById('ds_' + key);
+        el.value = ds[i];
+        document.getElementById('ds_' + key + 'v').textContent = (suffix === ' dB' ? ds[i] + ' dB' : ds[i].toFixed(2));
+      });
+    })();
     refreshDevices();
   </script>
 </body>

@@ -33,12 +33,22 @@ fn levels(state: State<'_, Mutex<AudioEngine>>) -> LevelMeter {
 fn set_input_gain(state: State<'_, Mutex<AudioEngine>>, db: f32) {
     state.lock().unwrap().set_input_gain_db(db)
 }
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+fn set_distortion(state: State<'_, Mutex<AudioEngine>>, mode: i32, drive_db: f32, tone: f32, mix: f32, downsample: f32, bit_depth: f32) {
+    state.lock().unwrap().set_distortion(mode, drive_db, tone, mix, downsample, bit_depth)
+}
+#[tauri::command]
+fn get_distortion(state: State<'_, Mutex<AudioEngine>>) -> (i32, f32, f32, f32, f32, f32) {
+    state.lock().unwrap().distortion_params()
+}
 
 fn main() {
     tauri::Builder::default()
         .manage(Mutex::new(AudioEngine::new()))
         .invoke_handler(tauri::generate_handler![
-            list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain
+            list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
+            set_distortion, get_distortion
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");

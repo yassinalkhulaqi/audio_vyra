@@ -25,6 +25,7 @@ use crate::meter::LevelMeterProcessor;
 use crate::gate::NoiseGate;
 use crate::compressor::Compressor;
 use crate::filter::Biquad;
+use crate::distortion::Distortion;
 
 impl AudioProcessor for Gain {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Gain::process(self, samples); }
@@ -45,4 +46,9 @@ impl AudioProcessor for Biquad {
 }
 impl AudioProcessor for LevelMeterProcessor {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { LevelMeterProcessor::process(self, samples); }
+}
+impl AudioProcessor for Distortion {
+    fn process(&mut self, samples: &mut [f32], _sr: u32) { Distortion::process(self, samples); }
+    fn bypass(&self) -> bool { Distortion::is_bypassed(self) }
+    fn set_bypass(&mut self, b: bool) { Distortion::set_bypass(self, b); }
 }
