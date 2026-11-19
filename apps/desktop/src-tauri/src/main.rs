@@ -1,4 +1,4 @@
-﻿#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use aurivo_audio_engine::AudioEngine;
 use aurivo_core::LevelMeter;
@@ -61,13 +61,22 @@ fn play_wav(state: State<'_, Mutex<AudioEngine>>, path: String) -> Result<(), St
 fn stop_playback(state: State<'_, Mutex<AudioEngine>>) {
     state.lock().unwrap().stop_playback()
 }
+#[tauri::command]
+fn set_vocal(state: State<'_, Mutex<AudioEngine>>, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
+    state.lock().unwrap().set_vocal(mode, carrier_hz, vowel, depth, mix)
+}
+#[tauri::command]
+fn get_vocal(state: State<'_, Mutex<AudioEngine>>) -> (i32, f32, f32, f32, f32) {
+    state.lock().unwrap().vocal_params()
+}
 
 fn main() {
     tauri::Builder::default()
         .manage(Mutex::new(AudioEngine::new()))
         .invoke_handler(tauri::generate_handler![
             list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
-            start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback
+            start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback,
+            set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");
