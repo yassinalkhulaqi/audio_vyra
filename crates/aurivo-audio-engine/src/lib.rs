@@ -2,8 +2,6 @@
 
 use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
 use recorder::{RecorderState, read_wav, write_wav};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad};
-﻿use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
 use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Vocal, VocalParams};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
@@ -121,6 +119,10 @@ impl AudioEngine {
         self.running = true;
         self.sample_rate = sr;
         self.channels = ch;
+        if let Ok(mut rec) = self.recorder.lock() {
+            rec.sample_rate = sr;
+            rec.channels = ch;
+        }
         Ok(())
     }
 
