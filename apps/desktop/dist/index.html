@@ -82,19 +82,84 @@
       box.innerHTML = '';
       const kinds = ['Peaking','Low Shelf','High Shelf','Low Pass','High Pass'];
       bands.forEach((b, i) => {
+        const state = Object.assign({}, b);
         const row = document.createElement('div');
         row.className = 'row';
-        row.innerHTML = `<span style="width:90px">${kinds[b.kind]||'Band'} ${i+1}</span>` +
-          `<input type="range" min="-18" max="18" step="0.5" value="${b.gain_db}" />` +
-          `<span>${b.gain_db.toFixed(1)} dB</span>`;
-        const slider = row.querySelector('input');
-        slider.oninput = (e) => {
-          const v = parseFloat(e.target.value);
-          row.children[2].textContent = v.toFixed(1) + ' dB';
-          invoke('set_eq_band', { index: i, kind: b.kind, frequency: b.frequency, q: b.q, gain_db: v, enabled: b.enabled });
+        row.style.flexWrap = 'wrap';
+
+        const title = document.createElement('span');
+        title.style.width = '70px';
+        title.textContent = 'Band ' + (i + 1);
+
+        const kindSel = document.createElement('select');
+        kinds.forEach((k, ki) => {
+          const o = document.createElement('option');
+          o.value = String(ki);
+          o.textContent = k;
+          if (ki === b.kind) o.selected = true;
+          kindSel.appendChild(o);
+        });
+        kindSel.onchange = () => { state.kind = parseInt(kindSel.value); pushBand(); };
+
+        function slider(min, max, step, key, fmt) {
+          const wrap = document.createElement('span');
+          wrap.style.display = 'inline-flex';
+          wrap.style.alignItems = 'center';
+          wrap.style.gap = '4px';
+          const input = document.createElement('input');
+          input.type = 'range';
+          input.min = min; input.max = max; input.step = step;
+          input.value = state[key];
+          const span = document.createElement('span');
+          span.textContent = fmt(state[key]);
+          input.oninput = () => {
+            state[key] = parseFloat(input.value);
+            span.textContent = fmt(state[key]);
+            pushBand();
+          };
+          wrap.append(input, span);
+          return wrap;
+        }
+
+        const freqEl = slider(20, 18000, 1, 'frequency', v => v.toFixed(0) + ' Hz');
+        const qEl = slider(0.1, 18, 0.1, 'q', v => v.toFixed(2));
+        const gainEl = slider(-18, 18, 0.5, 'gain_db', v => v.toFixed(1) + ' dB');
+
+        const en = document.createElement('input');
+        en.type = 'checkbox';
+        en.checked = state.enabled;
+        en.title = 'Enabled';
+        en.onchange = () => { state.enabled = en.checked; pushBand(); };
+
+        const del = document.createElement('button');
+        del.textContent = '\u00d7';
+        del.title = 'Remove band';
+        del.onclick = async () => {
+          await invoke('remove_eq_band', { index: i });
+          await loadEq();
         };
+
+        function pushBand() {
+          invoke('set_eq_band', {
+            index: i, kind: state.kind, frequency: state.frequency,
+            q: state.q, gain_db: state.gain_db, enabled: state.enabled
+          });
+        }
+
+        row.append(title, kindSel, freqEl, qEl, gainEl, en, del);
         box.appendChild(row);
       });
+
+      const addRow = document.createElement('div');
+      addRow.className = 'row';
+      const addBtn = document.createElement('button');
+      addBtn.textContent = '+ Add band';
+      addBtn.onclick = async () => {
+        await invoke('add_eq_band', { kind: 0, frequency: 1000, q: 1.0, gain_db: 0 });
+        await loadEq();
+      };
+      addRow.appendChild(addBtn);
+      box.appendChild(addRow);
     }
 
     let vo = [0, 40, 0, 0.6, 0.6];
