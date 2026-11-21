@@ -1,5 +1,5 @@
 use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Vocal, VocalParams};
+use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Vocal, VocalParams};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
 use std::sync::{Arc, Mutex, atomic::{AtomicU32, Ordering}};
@@ -12,6 +12,7 @@ pub struct AudioEngine {
     meter: Arc<LevelMeterProcessor>,
     gain: Arc<AtomicU32>,
     delay: Arc<Mutex<DelayParams>>,
+    reverb: Arc<Mutex<ReverbParams>>,
     vocal: Arc<Mutex<VocalParams>>,
     running: bool,
     sample_rate: u32,
@@ -30,6 +31,8 @@ impl AudioEngine {
         pipeline.add(Box::new(Biquad::new_highpass(80.0, 0.707, sr as f32)));
         let (delay_proc, delay_shared) = Delay::shared(sr);
         pipeline.add(Box::new(delay_proc));
+        let (reverb_proc, reverb_shared) = Reverb::shared(sr);
+        pipeline.add(Box::new(reverb_proc));
         let (vocal_proc, vocal_shared) = Vocal::shared(sr);
         pipeline.add(Box::new(vocal_proc));
         let meter = Arc::new(LevelMeterProcessor::new());
@@ -41,6 +44,7 @@ impl AudioEngine {
             meter,
             gain: gain_shared,
             delay: delay_shared,
+            reverb: reverb_shared,
             vocal: vocal_shared,
             running: false,
             sample_rate: sr,
@@ -134,6 +138,16 @@ impl AudioEngine {
         let p = Delay::snapshot(&self.delay);
         (p.time_ms, p.feedback, p.mix, p.damp)
     }
+
+    pub fn set_reverb(&self, room_size: f32, damp: f32, wet: f32, dry: f32) {
+        Reverb::update(&self.reverb, ReverbParams { room_size, damp, wet, dry });
+    }
+
+    pub fn reverb_params(&self) -> (f32, f32, f32, f32) {
+        let p = Reverb::snapshot(&self.reverb);
+        (p.room_size, p.damp, p.wet, p.dry)
+    }
+
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
         Vocal::update(&self.vocal, VocalParams { mode, carrier_hz, vowel, depth, mix });
     }
