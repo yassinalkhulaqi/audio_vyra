@@ -8,6 +8,7 @@ pub mod delay;
 pub mod reverb;
 pub mod distortion;
 pub mod modulation;
+pub mod eq;
 pub mod vocal;
 
 pub use gain::Gain;
@@ -20,4 +21,5 @@ pub use delay::{Delay, DelayParams};
 pub use reverb::{Reverb, ReverbParams};
 pub use distortion::{Distortion, DistortionParams};
 pub use modulation::{Modulation, ModulationParams};
+pub use eq::{EqBand, EqFilterKind, EqParams, ParametricEq};
 pub use vocal::{Vocal, VocalParams};

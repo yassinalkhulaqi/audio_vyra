@@ -29,6 +29,7 @@ use crate::delay::Delay;
 use crate::reverb::Reverb;
 use crate::distortion::Distortion;
 use crate::modulation::Modulation;
+use crate::eq::ParametricEq;
 use crate::vocal::Vocal;
 
 impl AudioProcessor for Gain {
@@ -70,6 +71,11 @@ impl AudioProcessor for Modulation {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Modulation::process(self, samples); }
     fn bypass(&self) -> bool { Modulation::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { Modulation::set_bypass(self, b); }
+}
+impl AudioProcessor for ParametricEq {
+    fn process(&mut self, samples: &mut [f32], _sr: u32) { ParametricEq::process(self, samples); }
+    fn bypass(&self) -> bool { ParametricEq::is_bypassed(self) }
+    fn set_bypass(&mut self, b: bool) { ParametricEq::set_bypass(self, b); }
 }
 impl AudioProcessor for Vocal {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Vocal::process(self, samples); }

@@ -1,8 +1,19 @@
 use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, Vocal, VocalParams};
+use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, Vocal, VocalParams};
+use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
+use serde::Serialize;
 use std::sync::{Arc, Mutex, atomic::{AtomicU32, Ordering}};
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EqBandInfo {
+    pub kind: i32,
+    pub frequency: f32,
+    pub q: f32,
+    pub gain_db: f32,
+    pub enabled: bool,
+}
 
 pub struct AudioEngine {
     host: cpal::Host,
@@ -15,6 +26,7 @@ pub struct AudioEngine {
     reverb: Arc<Mutex<ReverbParams>>,
     distortion: Arc<Mutex<DistortionParams>>,
     modulation: Arc<Mutex<ModulationParams>>,
+    eq: Arc<Mutex<EqParams>>,
     vocal: Arc<Mutex<VocalParams>>,
     running: bool,
     sample_rate: u32,
@@ -39,6 +51,8 @@ impl AudioEngine {
         pipeline.add(Box::new(distortion_proc));
         let (modulation_proc, modulation_shared) = Modulation::shared(sr);
         pipeline.add(Box::new(modulation_proc));
+        let (eq_proc, eq_shared) = ParametricEq::shared(sr);
+        pipeline.add(Box::new(eq_proc));
         let (vocal_proc, vocal_shared) = Vocal::shared(sr);
         pipeline.add(Box::new(vocal_proc));
         let meter = Arc::new(LevelMeterProcessor::new());
@@ -53,6 +67,7 @@ impl AudioEngine {
             reverb: reverb_shared,
             distortion: distortion_shared,
             modulation: modulation_shared,
+            eq: eq_shared,
             vocal: vocal_shared,
             running: false,
             sample_rate: sr,
@@ -173,6 +188,43 @@ impl AudioEngine {
     pub fn modulation_params(&self) -> (i32, f32, f32, f32, f32) {
         let p = Modulation::snapshot(&self.modulation);
         (p.mode, p.rate_hz, p.depth, p.feedback, p.mix)
+    }
+
+    pub fn set_eq_band(&self, index: usize, kind: i32, frequency: f32, q: f32, gain_db: f32, enabled: bool) {
+        eq_ops::set_band(&self.eq, index, EqBand {
+            kind: EqFilterKind::from_i32(kind),
+            frequency,
+            q,
+            gain_db,
+            enabled,
+        });
+    }
+
+    pub fn add_eq_band(&self, kind: i32, frequency: f32, q: f32, gain_db: f32) {
+        eq_ops::add_band(&self.eq, EqBand {
+            kind: EqFilterKind::from_i32(kind),
+            frequency,
+            q,
+            gain_db,
+            enabled: true,
+        });
+    }
+
+    pub fn remove_eq_band(&self, index: usize) {
+        eq_ops::remove_band(&self.eq, index);
+    }
+
+    pub fn eq_bands(&self) -> Vec<EqBandInfo> {
+        eq_ops::snapshot(&self.eq)
+            .into_iter()
+            .map(|b| EqBandInfo {
+                kind: b.kind.as_i32(),
+                frequency: b.frequency,
+                q: b.q,
+                gain_db: b.gain_db,
+                enabled: b.enabled,
+            })
+            .collect()
     }
 
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
