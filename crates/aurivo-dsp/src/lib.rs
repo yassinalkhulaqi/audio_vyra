@@ -6,6 +6,7 @@ pub mod filter;
 pub mod pipeline;
 pub mod delay;
 pub mod reverb;
+pub mod distortion;
 pub mod vocal;
 
 pub use gain::Gain;
@@ -16,4 +17,5 @@ pub use filter::{Biquad, BiquadType};
 pub use pipeline::{ProcessingPipeline, AudioProcessor};
 pub use delay::{Delay, DelayParams};
 pub use reverb::{Reverb, ReverbParams};
+pub use distortion::{Distortion, DistortionParams};
 pub use vocal::{Vocal, VocalParams};

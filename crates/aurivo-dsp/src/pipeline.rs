@@ -27,6 +27,7 @@ use crate::compressor::Compressor;
 use crate::filter::Biquad;
 use crate::delay::Delay;
 use crate::reverb::Reverb;
+use crate::distortion::Distortion;
 use crate::vocal::Vocal;
 
 impl AudioProcessor for Gain {
@@ -58,6 +59,11 @@ impl AudioProcessor for Reverb {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Reverb::process(self, samples); }
     fn bypass(&self) -> bool { Reverb::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { Reverb::set_bypass(self, b); }
+}
+impl AudioProcessor for Distortion {
+    fn process(&mut self, samples: &mut [f32], _sr: u32) { Distortion::process(self, samples); }
+    fn bypass(&self) -> bool { Distortion::is_bypassed(self) }
+    fn set_bypass(&mut self, b: bool) { Distortion::set_bypass(self, b); }
 }
 impl AudioProcessor for Vocal {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Vocal::process(self, samples); }

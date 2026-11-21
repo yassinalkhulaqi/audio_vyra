@@ -1,5 +1,5 @@
 use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Vocal, VocalParams};
+use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Vocal, VocalParams};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
 use std::sync::{Arc, Mutex, atomic::{AtomicU32, Ordering}};
@@ -13,6 +13,7 @@ pub struct AudioEngine {
     gain: Arc<AtomicU32>,
     delay: Arc<Mutex<DelayParams>>,
     reverb: Arc<Mutex<ReverbParams>>,
+    distortion: Arc<Mutex<DistortionParams>>,
     vocal: Arc<Mutex<VocalParams>>,
     running: bool,
     sample_rate: u32,
@@ -33,6 +34,8 @@ impl AudioEngine {
         pipeline.add(Box::new(delay_proc));
         let (reverb_proc, reverb_shared) = Reverb::shared(sr);
         pipeline.add(Box::new(reverb_proc));
+        let (distortion_proc, distortion_shared) = Distortion::shared(sr);
+        pipeline.add(Box::new(distortion_proc));
         let (vocal_proc, vocal_shared) = Vocal::shared(sr);
         pipeline.add(Box::new(vocal_proc));
         let meter = Arc::new(LevelMeterProcessor::new());
@@ -45,6 +48,7 @@ impl AudioEngine {
             gain: gain_shared,
             delay: delay_shared,
             reverb: reverb_shared,
+            distortion: distortion_shared,
             vocal: vocal_shared,
             running: false,
             sample_rate: sr,
@@ -146,6 +150,16 @@ impl AudioEngine {
     pub fn reverb_params(&self) -> (f32, f32, f32, f32) {
         let p = Reverb::snapshot(&self.reverb);
         (p.room_size, p.damp, p.wet, p.dry)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_distortion(&self, mode: i32, drive_db: f32, tone: f32, mix: f32, downsample: f32, bit_depth: f32) {
+        Distortion::update(&self.distortion, DistortionParams { mode, drive_db, tone, mix, downsample, bit_depth });
+    }
+
+    pub fn distortion_params(&self) -> (i32, f32, f32, f32, f32, f32) {
+        let p = Distortion::snapshot(&self.distortion);
+        (p.mode, p.drive_db, p.tone, p.mix, p.downsample, p.bit_depth)
     }
 
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {

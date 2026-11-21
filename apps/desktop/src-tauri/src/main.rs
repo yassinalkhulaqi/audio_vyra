@@ -49,6 +49,15 @@ fn set_reverb(state: State<'_, Mutex<AudioEngine>>, room_size: f32, damp: f32, w
 fn get_reverb(state: State<'_, Mutex<AudioEngine>>) -> (f32, f32, f32, f32) {
     state.lock().unwrap().reverb_params()
 }
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+fn set_distortion(state: State<'_, Mutex<AudioEngine>>, mode: i32, drive_db: f32, tone: f32, mix: f32, downsample: f32, bit_depth: f32) {
+    state.lock().unwrap().set_distortion(mode, drive_db, tone, mix, downsample, bit_depth)
+}
+#[tauri::command]
+fn get_distortion(state: State<'_, Mutex<AudioEngine>>) -> (i32, f32, f32, f32, f32, f32) {
+    state.lock().unwrap().distortion_params()
+}
 #[tauri::command]
 fn set_vocal(state: State<'_, Mutex<AudioEngine>>, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
     state.lock().unwrap().set_vocal(mode, carrier_hz, vowel, depth, mix)
@@ -63,7 +72,7 @@ fn main() {
         .manage(Mutex::new(AudioEngine::new()))
         .invoke_handler(tauri::generate_handler![
             list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
-            set_delay, get_delay, set_reverb, get_reverb, set_vocal, get_vocal
+            set_delay, get_delay, set_reverb, get_reverb, set_distortion, get_distortion, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");
