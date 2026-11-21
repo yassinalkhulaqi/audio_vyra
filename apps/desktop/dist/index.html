@@ -42,6 +42,8 @@
    <div class="row"><label>Drive</label><input id="ds_drive" type="range" min="-12" max="48" step="1" value="12" /><span id="ds_drivev">12 dB</span></div>
    <div class="row"><label>Tone</label><input id="ds_tone" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="ds_tonev">0.60</span></div>
    <div class="row"><label>Mix</label><input id="ds_mix" type="range" min="0" max="1" step="0.01" value="0.5" /><span id="ds_mixv">0.50</span></div>
+   <div class="row"><label>Downsample</label><input id="ds_down" type="range" min="1" max="64" step="1" value="1" /><span id="ds_downv">1x</span></div>
+   <div class="row"><label>Bit depth</label><input id="ds_bits" type="range" min="1" max="24" step="1" value="8" /><span id="ds_bitsv">8</span></div>
    <h2 style="font-size:16px;margin-top:24px;">Vocal FX</h2>
    <div class="row"><label>Mode</label>
      <select id="vo_mode"><option value="0">Ring mod</option><option value="1">Robot</option><option value="2">Vowel formant</option><option value="3">Tremolo</option></select>
@@ -85,21 +87,24 @@
     function pushDist() { invoke('set_distortion', { mode: ds[0], drive_db: ds[1], tone: ds[2], mix: ds[3], downsample: ds[4], bit_depth: ds[5] }); }
     const dsMode = document.getElementById('ds_mode');
     dsMode.onchange = (e) => { ds[0] = parseInt(e.target.value); pushDist(); };
-    [['drive',1,' dB'],['tone',2,''],['mix',3,'']].forEach(([key,i,suffix]) => {
+    const distFmt = (key, v) => key === 'drive' ? v + ' dB' : (key === 'down' ? v + 'x' : (key === 'bits' ? String(v) : v.toFixed(2)));
+    [['drive',1],['tone',2],['mix',3],['down',4],['bits',5]].forEach(([key,i]) => {
       const el = document.getElementById('ds_' + key);
       el.oninput = (e) => {
         ds[i] = parseFloat(e.target.value);
-        document.getElementById('ds_' + key + 'v').textContent = (suffix === ' dB' ? ds[i] + ' dB' : ds[i].toFixed(2));
+        document.getElementById('ds_' + key + 'v').textContent = distFmt(key, ds[i]);
         pushDist();
       };
     });
     (async () => {
       ds = await invoke('get_distortion');
       dsMode.value = ds[0];
-      [['drive',1,' dB'],['tone',2,''],['mix',3,'']].forEach(([key,i,suffix]) => {
+      [['drive',1],['tone',2],['mix',3],['down',4],['bits',5]].forEach(([key,i]) => {
         const el = document.getElementById('ds_' + key);
         el.value = ds[i];
-        document.getElementById('ds_' + key + 'v').textContent = (suffix === ' dB' ? ds[i] + ' dB' : ds[i].toFixed(2));
+        document.getElementById('ds_' + key + 'v').textContent = distFmt(key, ds[i]);
+      });
+    })();
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
