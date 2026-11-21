@@ -83,6 +83,14 @@ fn remove_eq_band(state: State<'_, Mutex<AudioEngine>>, index: usize) {
     state.lock().unwrap().remove_eq_band(index)
 }
 #[tauri::command]
+fn set_pitch(state: State<'_, Mutex<AudioEngine>>, semitones: f32) {
+    state.lock().unwrap().set_pitch_semitones(semitones)
+}
+#[tauri::command]
+fn get_pitch(state: State<'_, Mutex<AudioEngine>>) -> f32 {
+    state.lock().unwrap().pitch_semitones()
+}
+#[tauri::command]
 fn set_vocal(state: State<'_, Mutex<AudioEngine>>, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
     state.lock().unwrap().set_vocal(mode, carrier_hz, vowel, depth, mix)
 }
@@ -97,7 +105,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
             set_delay, get_delay, set_reverb, get_reverb, set_distortion, get_distortion, set_modulation, get_modulation,
-            get_eq_bands, set_eq_band, add_eq_band, remove_eq_band, set_vocal, get_vocal
+            get_eq_bands, set_eq_band, add_eq_band, remove_eq_band, set_pitch, get_pitch, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");

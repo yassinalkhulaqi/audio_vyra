@@ -9,6 +9,7 @@ pub mod reverb;
 pub mod distortion;
 pub mod modulation;
 pub mod eq;
+pub mod pitch;
 pub mod vocal;
 
 pub use gain::Gain;
@@ -22,4 +23,5 @@ pub use reverb::{Reverb, ReverbParams};
 pub use distortion::{Distortion, DistortionParams};
 pub use modulation::{Modulation, ModulationParams};
 pub use eq::{EqBand, EqFilterKind, EqParams, ParametricEq};
+pub use pitch::PitchShifter;
 pub use vocal::{Vocal, VocalParams};

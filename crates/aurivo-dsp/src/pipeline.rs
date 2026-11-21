@@ -30,6 +30,7 @@ use crate::reverb::Reverb;
 use crate::distortion::Distortion;
 use crate::modulation::Modulation;
 use crate::eq::ParametricEq;
+use crate::pitch::PitchShifter;
 use crate::vocal::Vocal;
 
 impl AudioProcessor for Gain {
@@ -76,6 +77,11 @@ impl AudioProcessor for ParametricEq {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { ParametricEq::process(self, samples); }
     fn bypass(&self) -> bool { ParametricEq::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { ParametricEq::set_bypass(self, b); }
+}
+impl AudioProcessor for PitchShifter {
+    fn process(&mut self, samples: &mut [f32], _sr: u32) { PitchShifter::process(self, samples); }
+    fn bypass(&self) -> bool { PitchShifter::is_bypassed(self) }
+    fn set_bypass(&mut self, b: bool) { PitchShifter::set_bypass(self, b); }
 }
 impl AudioProcessor for Vocal {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Vocal::process(self, samples); }

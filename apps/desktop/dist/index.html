@@ -64,6 +64,11 @@
    <div class="row"><label>Mix</label><input id="mo_mix" type="range" min="0" max="1" step="0.01" value="0.5" /><span id="mo_mixv">0.50</span></div>
    <h2 style="font-size:16px;margin-top:24px;">Parametric EQ</h2>
    <div id="eq"></div>
+   <div class="row">
+     <label>Pitch</label>
+     <input id="pitch" type="range" min="-24" max="24" step="1" value="0" />
+     <span id="pitchval">0 st</span>
+   </div>
    <h2 style="font-size:16px;margin-top:24px;">Vocal FX</h2>
    <div class="row"><label>Mode</label>
      <select id="vo_mode"><option value="0">Ring mod</option><option value="1">Robot</option><option value="2">Vowel formant</option><option value="3">Tremolo</option></select>
@@ -268,6 +273,17 @@
       box.appendChild(addRow);
     }
 
+    const pitch = document.getElementById('pitch');
+    pitch.oninput = async (e) => {
+      const v = parseFloat(e.target.value);
+      document.getElementById('pitchval').textContent = v + ' st';
+      await invoke('set_pitch', { semitones: v });
+    };
+    (async () => {
+      const v = await invoke('get_pitch');
+      pitch.value = v;
+      document.getElementById('pitchval').textContent = v + ' st';
+    })();
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }

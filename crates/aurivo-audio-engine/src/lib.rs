@@ -1,5 +1,5 @@
 use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, Vocal, VocalParams};
+use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
@@ -27,6 +27,7 @@ pub struct AudioEngine {
     distortion: Arc<Mutex<DistortionParams>>,
     modulation: Arc<Mutex<ModulationParams>>,
     eq: Arc<Mutex<EqParams>>,
+    pitch: Arc<AtomicU32>,
     vocal: Arc<Mutex<VocalParams>>,
     running: bool,
     sample_rate: u32,
@@ -53,6 +54,8 @@ impl AudioEngine {
         pipeline.add(Box::new(modulation_proc));
         let (eq_proc, eq_shared) = ParametricEq::shared(sr);
         pipeline.add(Box::new(eq_proc));
+        let (pitch_proc, pitch_shared) = PitchShifter::shared(sr);
+        pipeline.add(Box::new(pitch_proc));
         let (vocal_proc, vocal_shared) = Vocal::shared(sr);
         pipeline.add(Box::new(vocal_proc));
         let meter = Arc::new(LevelMeterProcessor::new());
@@ -68,6 +71,7 @@ impl AudioEngine {
             distortion: distortion_shared,
             modulation: modulation_shared,
             eq: eq_shared,
+            pitch: pitch_shared,
             vocal: vocal_shared,
             running: false,
             sample_rate: sr,
@@ -225,6 +229,14 @@ impl AudioEngine {
                 enabled: b.enabled,
             })
             .collect()
+    }
+
+    pub fn set_pitch_semitones(&self, semitones: f32) {
+        PitchShifter::set_semitones_shared(&self.pitch, semitones);
+    }
+
+    pub fn pitch_semitones(&self) -> f32 {
+        f32::from_bits(self.pitch.load(Ordering::Relaxed))
     }
 
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
