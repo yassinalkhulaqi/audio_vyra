@@ -55,8 +55,19 @@ fn delete_preset(dir: String, name: String) -> Result<(), String> {
 }
 #[tauri::command]
 fn apply_preset(state: State<'_, Mutex<AudioEngine>>, params: BTreeMap<String, f32>) {
+    let engine = state.lock().unwrap();
     if let Some(&db) = params.get("gain_db") {
-        state.lock().unwrap().set_input_gain_db(db);
+        engine.set_input_gain_db(db);
+    }
+    const VOCAL_KEYS: [&str; 5] = ["vocal_mode", "vocal_carrier_hz", "vocal_vowel", "vocal_depth", "vocal_mix"];
+    if VOCAL_KEYS.iter().any(|k| params.contains_key(*k)) {
+        let cur = engine.vocal_params();
+        let mode = params.get("vocal_mode").map(|&v| v as i32).unwrap_or(cur.0);
+        let carrier_hz = params.get("vocal_carrier_hz").copied().unwrap_or(cur.1);
+        let vowel = params.get("vocal_vowel").copied().unwrap_or(cur.2);
+        let depth = params.get("vocal_depth").copied().unwrap_or(cur.3);
+        let mix = params.get("vocal_mix").copied().unwrap_or(cur.4);
+        engine.set_vocal(mode, carrier_hz, vowel, depth, mix);
     }
 }
 #[tauri::command]

@@ -80,6 +80,16 @@
       } catch(e) {}
     }, 100);
     const prDir = () => document.getElementById('pr_dir').value;
+    function collectPresetParams() {
+      return {
+        gain_db: parseFloat(document.getElementById('gain').value) || 0,
+        vocal_mode: vo[0],
+        vocal_carrier_hz: vo[1],
+        vocal_vowel: vo[2],
+        vocal_depth: vo[3],
+        vocal_mix: vo[4],
+      };
+    }
     async function refreshPresets() {
       try {
         const names = await invoke('list_presets', { dir: prDir() });
@@ -87,9 +97,8 @@
       } catch(e) {}
     }
     document.getElementById('pr_save').onclick = async () => {
-      const params = { gain_db: parseFloat(document.getElementById('gain').value) || 0 };
       try {
-        await invoke('save_preset', { dir: prDir(), name: document.getElementById('pr_name').value, params });
+        await invoke('save_preset', { dir: prDir(), name: document.getElementById('pr_name').value, params: collectPresetParams() });
         refreshPresets();
       } catch(e) { alert('Save failed: ' + e); }
     };
@@ -100,6 +109,19 @@
         const p = await invoke('load_preset', { dir: prDir(), name });
         document.getElementById('pr_info').textContent = JSON.stringify(p.params);
         await invoke('apply_preset', { params: p.params });
+        if (typeof p.params.gain_db === 'number') {
+          const g = document.getElementById('gain');
+          g.value = p.params.gain_db;
+          document.getElementById('gainval').textContent = p.params.gain_db;
+        }
+        const map = { mode: 'vocal_mode', car: 'vocal_carrier_hz', vowel: 'vocal_vowel', depth: 'vocal_depth', mix: 'vocal_mix' };
+        Object.entries(map).forEach(([key, pk]) => {
+          if (typeof p.params[pk] === 'number') {
+            const idx = { mode: 0, car: 1, vowel: 2, depth: 3, mix: 4 }[key];
+            vo[idx] = p.params[pk];
+          }
+        });
+        syncVocalUI();
       } catch(e) { alert('Load failed: ' + e); }
     };
     document.getElementById('pr_delete').onclick = async () => {
@@ -115,6 +137,14 @@
     const voMode = document.getElementById('vo_mode');
     voMode.onchange = (e) => { vo[0] = parseInt(e.target.value); pushVocal(); };
     const vowelFmt = (v) => vowels[Math.round(v)] || 'A';
+    function syncVocalUI() {
+      voMode.value = vo[0];
+      [['car',1,' Hz'],['vowel',2,'v'],['depth',3,''],['mix',4,'']].forEach(([key,i,suffix]) => {
+        const el = document.getElementById('vo_' + key);
+        el.value = vo[i];
+        document.getElementById('vo_' + key + 'v').textContent = suffix === 'v' ? vowelFmt(vo[i]) : (suffix === ' Hz' ? vo[i] + ' Hz' : vo[i].toFixed(2));
+      });
+    }
     [['car',1,' Hz'],['vowel',2,'v'],['depth',3,''],['mix',4,'']].forEach(([key,i,suffix]) => {
       const el = document.getElementById('vo_' + key);
       el.oninput = (e) => {
@@ -125,12 +155,7 @@
     });
     (async () => {
       vo = await invoke('get_vocal');
-      voMode.value = vo[0];
-      [['car',1,' Hz'],['vowel',2,'v'],['depth',3,''],['mix',4,'']].forEach(([key,i,suffix]) => {
-        const el = document.getElementById('vo_' + key);
-        el.value = vo[i];
-        document.getElementById('vo_' + key + 'v').textContent = suffix === 'v' ? vowelFmt(vo[i]) : (suffix === ' Hz' ? vo[i] + ' Hz' : vo[i].toFixed(2));
-      });
+      syncVocalUI();
     })();
     refreshDevices();
   </script>
