@@ -59,6 +59,14 @@ fn get_distortion(state: State<'_, Mutex<AudioEngine>>) -> (i32, f32, f32, f32, 
     state.lock().unwrap().distortion_params()
 }
 #[tauri::command]
+fn set_modulation(state: State<'_, Mutex<AudioEngine>>, mode: i32, rate_hz: f32, depth: f32, feedback: f32, mix: f32) {
+    state.lock().unwrap().set_modulation(mode, rate_hz, depth, feedback, mix)
+}
+#[tauri::command]
+fn get_modulation(state: State<'_, Mutex<AudioEngine>>) -> (i32, f32, f32, f32, f32) {
+    state.lock().unwrap().modulation_params()
+}
+#[tauri::command]
 fn set_vocal(state: State<'_, Mutex<AudioEngine>>, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
     state.lock().unwrap().set_vocal(mode, carrier_hz, vowel, depth, mix)
 }
@@ -72,7 +80,7 @@ fn main() {
         .manage(Mutex::new(AudioEngine::new()))
         .invoke_handler(tauri::generate_handler![
             list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
-            set_delay, get_delay, set_reverb, get_reverb, set_distortion, get_distortion, set_vocal, get_vocal
+            set_delay, get_delay, set_reverb, get_reverb, set_distortion, get_distortion, set_modulation, get_modulation, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");

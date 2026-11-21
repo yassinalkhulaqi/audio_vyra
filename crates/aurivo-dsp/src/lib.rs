@@ -7,6 +7,7 @@ pub mod pipeline;
 pub mod delay;
 pub mod reverb;
 pub mod distortion;
+pub mod modulation;
 pub mod vocal;
 
 pub use gain::Gain;
@@ -18,4 +19,5 @@ pub use pipeline::{ProcessingPipeline, AudioProcessor};
 pub use delay::{Delay, DelayParams};
 pub use reverb::{Reverb, ReverbParams};
 pub use distortion::{Distortion, DistortionParams};
+pub use modulation::{Modulation, ModulationParams};
 pub use vocal::{Vocal, VocalParams};
