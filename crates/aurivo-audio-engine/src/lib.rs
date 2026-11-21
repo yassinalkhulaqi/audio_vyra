@@ -1,6 +1,5 @@
 use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, PitchShifter};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Vocal, VocalParams};
+use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, PitchShifter, Vocal, VocalParams};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
 use std::sync::{Arc, Mutex, atomic::{AtomicU32, Ordering}};
@@ -131,7 +130,6 @@ impl AudioEngine {
     }
     pub fn pitch_semitones(&self) -> f32 {
         f32::from_bits(self.pitch.load(Ordering::Relaxed))
-
     }
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
         Vocal::update(&self.vocal, VocalParams { mode, carrier_hz, vowel, depth, mix });
