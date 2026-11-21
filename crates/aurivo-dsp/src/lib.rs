@@ -4,6 +4,7 @@ pub mod gate;
 pub mod compressor;
 pub mod filter;
 pub mod pipeline;
+pub mod analysis;
 pub mod vocal;
 
 pub use gain::Gain;
@@ -12,4 +13,5 @@ pub use gate::NoiseGate;
 pub use compressor::Compressor;
 pub use filter::{Biquad, BiquadType};
 pub use pipeline::{ProcessingPipeline, AudioProcessor};
+pub use analysis::SpectrumAnalyzer;
 pub use vocal::{Vocal, VocalParams};
