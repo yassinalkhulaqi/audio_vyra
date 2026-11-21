@@ -1,4 +1,4 @@
-﻿#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use aurivo_audio_engine::AudioEngine;
 use aurivo_core::LevelMeter;
@@ -34,6 +34,14 @@ fn set_input_gain(state: State<'_, Mutex<AudioEngine>>, db: f32) {
     state.lock().unwrap().set_input_gain_db(db)
 }
 #[tauri::command]
+fn set_delay(state: State<'_, Mutex<AudioEngine>>, time_ms: f32, feedback: f32, mix: f32, damp: f32) {
+    state.lock().unwrap().set_delay(time_ms, feedback, mix, damp)
+}
+#[tauri::command]
+fn get_delay(state: State<'_, Mutex<AudioEngine>>) -> (f32, f32, f32, f32) {
+    state.lock().unwrap().delay_params()
+}
+#[tauri::command]
 fn set_vocal(state: State<'_, Mutex<AudioEngine>>, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
     state.lock().unwrap().set_vocal(mode, carrier_hz, vowel, depth, mix)
 }
@@ -47,6 +55,7 @@ fn main() {
         .manage(Mutex::new(AudioEngine::new()))
         .invoke_handler(tauri::generate_handler![
             list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
+            set_delay, get_delay,
             set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())

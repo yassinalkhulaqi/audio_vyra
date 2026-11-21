@@ -35,6 +35,11 @@
      <div class="meter"><div class="bar" id="bar"></div></div>
      <span id="lvl">0.000</span>
    </div>
+   <h2 style="font-size:16px;margin-top:24px;">Delay / Echo</h2>
+   <div class="row"><label>Time</label><input id="dl_time" type="range" min="20" max="1200" step="10" value="300" /><span id="dl_timev">300 ms</span></div>
+   <div class="row"><label>Feedback</label><input id="dl_fb" type="range" min="0" max="0.95" step="0.01" value="0.35" /><span id="dl_fbv">0.35</span></div>
+   <div class="row"><label>Mix</label><input id="dl_mix" type="range" min="0" max="1" step="0.01" value="0.3" /><span id="dl_mixv">0.30</span></div>
+   <div class="row"><label>Damp</label><input id="dl_damp" type="range" min="0" max="1" step="0.01" value="0.2" /><span id="dl_dampv">0.20</span></div>
    <h2 style="font-size:16px;margin-top:24px;">Vocal FX</h2>
    <div class="row"><label>Mode</label>
      <select id="vo_mode"><option value="0">Ring mod</option><option value="1">Robot</option><option value="2">Vowel formant</option><option value="3">Tremolo</option></select>
@@ -74,6 +79,24 @@
         document.getElementById('lvl').textContent = rms.toFixed(3);
       } catch(e) {}
     }, 100);
+    let dl = [300, 0.35, 0.3, 0.2];
+    function pushDelay() { invoke('set_delay', { time_ms: dl[0], feedback: dl[1], mix: dl[2], damp: dl[3] }); }
+    [['time',0],['fb',1],['mix',2],['damp',3]].forEach(([key,i]) => {
+      const el = document.getElementById('dl_' + key);
+      el.oninput = (e) => {
+        dl[i] = parseFloat(e.target.value);
+        document.getElementById('dl_' + key + 'v').textContent = key === 'time' ? dl[i] + ' ms' : dl[i].toFixed(2);
+        pushDelay();
+      };
+    });
+    (async () => {
+      dl = await invoke('get_delay');
+      [['time',0],['fb',1],['mix',2],['damp',3]].forEach(([key,i]) => {
+        const el = document.getElementById('dl_' + key);
+        el.value = dl[i];
+        document.getElementById('dl_' + key + 'v').textContent = key === 'time' ? dl[i] + ' ms' : dl[i].toFixed(2);
+      });
+    })();
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
