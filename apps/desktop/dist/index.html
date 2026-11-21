@@ -101,6 +101,8 @@
         const el = document.getElementById('mo_' + key);
         el.value = mo[i];
         document.getElementById('mo_' + key + 'v').textContent = (suffix === ' Hz' ? mo[i].toFixed(1) + ' Hz' : mo[i].toFixed(2));
+      });
+    })();
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
