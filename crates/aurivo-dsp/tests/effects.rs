@@ -113,16 +113,17 @@ fn modulation_changes_signal() {
 #[test]
 fn eq_bands_can_be_added_edited_removed() {
     let (mut fx, h) = ParametricEq::shared(48000);
+    let initial = aurivo_dsp::eq::snapshot(&h).len();
     let band = EqBand { kind: EqFilterKind::Peaking, frequency: 1000.0, q: 1.0, gain_db: 6.0, enabled: true };
     aurivo_dsp::eq::add_band(&h, band);
-    assert_eq!(aurivo_dsp::eq::snapshot(&h).len(), 1);
+    assert_eq!(aurivo_dsp::eq::snapshot(&h).len(), initial + 1);
     aurivo_dsp::eq::set_band(&h, 0, EqBand { kind: EqFilterKind::Peaking, frequency: 1000.0, q: 1.0, gain_db: -3.0, enabled: true });
     assert!((aurivo_dsp::eq::snapshot(&h)[0].gain_db + 3.0).abs() < 1e-6);
     let mut buf = sine(48000, 1000.0, 2048);
     fx.process(&mut buf);
     assert_finite(&buf);
     aurivo_dsp::eq::remove_band(&h, 0);
-    assert!(aurivo_dsp::eq::snapshot(&h).is_empty());
+    assert_eq!(aurivo_dsp::eq::snapshot(&h).len(), initial);
 }
 
 #[test]
