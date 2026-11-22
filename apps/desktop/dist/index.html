@@ -49,6 +49,14 @@
     <div class="row"><label><input id="out_mute" type="checkbox" /> Mute</label></div>
   </div>
   <div class="panel">
+    <h2>Effects (enable / bypass)</h2>
+    <div class="row" id="fx_toggles" style="flex-wrap:wrap;"></div>
+  </div>
+  <div class="panel">
+    <h2>Effect chain</h2>
+    <div id="fx_chain"></div>
+  </div>
+  <div class="panel">
     <h2>Recorder</h2>
     <div class="row"><button id="rec_start">Record</button><button id="rec_stop">Stop</button><span id="rec_state" class="status">Idle</span></div>
     <div class="row"><span id="rec_count" class="status">0 samples</span></div>
@@ -415,6 +423,51 @@
       catch(e) { alert('Delete failed: ' + e); }
     };
     refreshPresets();
+    (async () => {
+      try {
+        const names = await invoke('list_effects');
+        const box = document.getElementById('fx_toggles');
+        for (const n of names) {
+          const label = document.createElement('label');
+          label.style.marginRight = '14px';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = await invoke('effect_enabled', { name: n });
+          cb.onchange = async () => { await invoke('set_effect_enabled', { name: n, enabled: cb.checked }); };
+          label.append(cb, document.createTextNode(' ' + n));
+          box.appendChild(label);
+        }
+      } catch(e) {}
+    })();
+    async function loadChain() {
+      try {
+        const names = await invoke('list_effects');
+        const box = document.getElementById('fx_chain');
+        box.innerHTML = '';
+        for (const n of names) {
+          const row = document.createElement('div');
+          row.className = 'row';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = await invoke('effect_enabled', { name: n });
+          cb.onchange = async () => { await invoke('set_effect_enabled', { name: n, enabled: cb.checked }); };
+          const label = document.createElement('span');
+          label.textContent = n;
+          const up = document.createElement('button');
+          up.textContent = '\u2191';
+          up.onclick = async () => { await invoke('move_effect', { name: n, delta: -1 }); await loadChain(); };
+          const down = document.createElement('button');
+          down.textContent = '\u2193';
+          down.onclick = async () => { await invoke('move_effect', { name: n, delta: 1 }); await loadChain(); };
+          const del = document.createElement('button');
+          del.textContent = '\u00d7';
+          del.onclick = async () => { await invoke('remove_effect', { name: n }); await loadChain(); };
+          row.append(cb, label, up, down, del);
+          box.appendChild(row);
+        }
+      } catch(e) {}
+    }
+    loadChain();
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
