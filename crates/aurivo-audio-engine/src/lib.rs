@@ -1,5 +1,6 @@
 pub mod chain;
 pub mod recorder;
+pub mod state;
 
 use aurivo_core::{AurivoError, Result, LevelMeter};
 use chain::EffectChain;
@@ -8,10 +9,11 @@ use aurivo_dsp::{AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compresso
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+pub use state::AppState;
 use std::sync::{Arc, Mutex, atomic::{AtomicU32, AtomicBool, Ordering}};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EqBandInfo {
     pub kind: i32,
     pub frequency: f32,
@@ -373,6 +375,46 @@ impl AudioEngine {
 
     pub fn move_effect(&self, name: &str, delta: i32) -> bool {
         self.chain.lock().map(|mut c| c.move_by(name, delta as isize)).unwrap_or(false)
+    }
+
+    pub fn state(&self) -> AppState {
+        let d = self.delay_params();
+        let r = self.reverb_params();
+        let x = self.distortion_params();
+        let m = self.modulation_params();
+        let v = self.vocal_params();
+        let mut s = AppState::default();
+        s.input_gain_db = f32::from_bits(self.gain.load(Ordering::Relaxed));
+        s.output_gain_db = self.output_gain_db();
+        s.output_muted = self.is_output_muted();
+        s.delay = [d.0, d.1, d.2, d.3];
+        s.reverb = [r.0, r.1, r.2, r.3];
+        s.distortion = [x.0 as f32, x.1, x.2, x.3, x.4, x.5];
+        s.modulation = [m.0 as f32, m.1, m.2, m.3, m.4];
+        s.pitch_semitones = self.pitch_semitones();
+        s.eq_bands = self.eq_bands();
+        s.vocal = [v.0 as f32, v.1, v.2, v.3, v.4];
+        s
+    }
+
+    pub fn apply_state(&self, s: &AppState) {
+        self.set_input_gain_db(s.input_gain_db);
+        self.set_output_gain_db(s.output_gain_db);
+        self.set_output_muted(s.output_muted);
+        let d = &s.delay;
+        self.set_delay(d[0], d[1], d[2], d[3]);
+        let r = &s.reverb;
+        self.set_reverb(r[0], r[1], r[2], r[3]);
+        let x = &s.distortion;
+        self.set_distortion(x[0] as i32, x[1], x[2], x[3], x[4], x[5]);
+        let m = &s.modulation;
+        self.set_modulation(m[0] as i32, m[1], m[2], m[3], m[4]);
+        self.set_pitch_semitones(s.pitch_semitones);
+        for (i, b) in s.eq_bands.iter().enumerate() {
+            self.set_eq_band(i, b.kind, b.frequency, b.q, b.gain_db, b.enabled);
+        }
+        let v = &s.vocal;
+        self.set_vocal(v[0] as i32, v[1], v[2], v[3], v[4]);
     }
 
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {

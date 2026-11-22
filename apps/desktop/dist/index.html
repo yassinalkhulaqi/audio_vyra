@@ -49,6 +49,11 @@
     <div class="row"><label><input id="out_mute" type="checkbox" /> Mute</label></div>
   </div>
   <div class="panel">
+    <h2>Session state</h2>
+    <div class="row"><button id="st_dump">Dump state</button><button id="st_apply">Apply state</button></div>
+    <textarea id="st_json" rows="5"></textarea>
+  </div>
+  <div class="panel">
     <h2>Effects (enable / bypass)</h2>
     <div class="row" id="fx_toggles" style="flex-wrap:wrap;"></div>
   </div>
@@ -468,6 +473,14 @@
       } catch(e) {}
     }
     loadChain();
+    document.getElementById('st_dump').onclick = async () => {
+      try { document.getElementById('st_json').value = JSON.stringify(await invoke('get_state'), null, 2); }
+      catch(e) { alert('Dump failed: ' + e); }
+    };
+    document.getElementById('st_apply').onclick = async () => {
+      try { await invoke('set_state', { newState: JSON.parse(document.getElementById('st_json').value) }); }
+      catch(e) { alert('Apply failed: ' + e); }
+    };
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
