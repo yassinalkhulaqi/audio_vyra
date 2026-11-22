@@ -35,6 +35,8 @@
      <label>Level</label>
      <div class="meter"><div class="bar" id="bar"></div></div>
      <span id="lvl">0.000</span>
+     <span id="clip" class="status" style="color:#8b949e;">CLIP</span>
+     <button id="clip_reset">Reset clip</button>
    </div>
    <h2 style="font-size:16px;margin-top:24px;">Spectrum</h2>
    <canvas id="spectrum" width="512" height="140"></canvas>
@@ -138,6 +140,8 @@
         const l = await invoke('levels');
         const rms = l.rms || 0;
         document.getElementById('bar').style.width = Math.min(100, rms*200) + '%';
+        document.getElementById('bar').style.background = l.clipped ? '#d29922' : '#2ea043';
+        document.getElementById('clip').style.color = l.clipped ? '#f85149' : '#8b949e';
         document.getElementById('lvl').textContent = rms.toFixed(3);
       } catch(e) {}
     }, 100);
@@ -422,6 +426,7 @@
       catch(e) { alert('Delete failed: ' + e); }
     };
     refreshPresets();
+    document.getElementById('clip_reset').onclick = async () => { await invoke('reset_clip'); };
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
