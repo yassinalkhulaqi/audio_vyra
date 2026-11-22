@@ -2,7 +2,7 @@
 
 mod presets;
 
-use aurivo_audio_engine::{AudioEngine, EqBandInfo};
+use aurivo_audio_engine::{AppState, AudioEngine, EqBandInfo};
 use aurivo_core::LevelMeter;
 use presets::Preset;
 use std::collections::BTreeMap;
@@ -176,6 +176,14 @@ fn apply_preset(state: State<'_, Mutex<AudioEngine>>, params: BTreeMap<String, f
     }
 }
 #[tauri::command]
+fn get_state(state: State<'_, Mutex<AudioEngine>>) -> AppState {
+    state.lock().unwrap().state()
+}
+#[tauri::command]
+fn set_state(state: State<'_, Mutex<AudioEngine>>, new_state: AppState) {
+    state.lock().unwrap().apply_state(&new_state);
+}
+#[tauri::command]
 fn set_vocal(state: State<'_, Mutex<AudioEngine>>, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
     state.lock().unwrap().set_vocal(mode, carrier_hz, vowel, depth, mix)
 }
@@ -193,7 +201,7 @@ fn main() {
             get_eq_bands, set_eq_band, add_eq_band, remove_eq_band, set_pitch, get_pitch,
             spectrum, set_output_gain, get_output_gain, set_output_muted, is_output_muted,
             start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback,
-            list_presets, save_preset, load_preset, delete_preset, apply_preset, set_vocal, get_vocal
+            list_presets, save_preset, load_preset, delete_preset, apply_preset, get_state, set_state, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");

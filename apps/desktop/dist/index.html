@@ -102,6 +102,9 @@
    <div class="row"><label>Name</label><input id="pr_name" type="text" value="My Voice" /><button id="pr_save">Save</button></div>
    <div class="row"><label>Saved</label><select id="pr_list"></select><button id="pr_load">Load</button><button id="pr_delete">Delete</button></div>
    <div class="row"><label>Params</label><span id="pr_info" class="status">—</span></div>
+   <h2 style="font-size:16px;margin-top:24px;">Session state</h2>
+   <div class="row"><button id="st_dump">Dump state</button><button id="st_apply">Apply state</button></div>
+   <div class="row"><textarea id="st_json" rows="6" style="width:100%;font-family:monospace;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:8px;"></textarea></div>
    <h2 style="font-size:16px;margin-top:24px;">Vocal FX</h2>
    <div class="row"><label>Mode</label>
      <select id="vo_mode"><option value="0">Ring mod</option><option value="1">Robot</option><option value="2">Vowel formant</option><option value="3">Tremolo</option></select>
@@ -422,6 +425,18 @@
       catch(e) { alert('Delete failed: ' + e); }
     };
     refreshPresets();
+    document.getElementById('st_dump').onclick = async () => {
+      try {
+        const s = await invoke('get_state');
+        document.getElementById('st_json').value = JSON.stringify(s, null, 2);
+      } catch(e) { alert('Dump failed: ' + e); }
+    };
+    document.getElementById('st_apply').onclick = async () => {
+      try {
+        const s = JSON.parse(document.getElementById('st_json').value);
+        await invoke('set_state', { newState: s });
+      } catch(e) { alert('Apply failed: ' + e); }
+    };
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
