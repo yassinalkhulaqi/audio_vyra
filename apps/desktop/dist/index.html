@@ -102,6 +102,9 @@
    <div class="row"><label>Name</label><input id="pr_name" type="text" value="My Voice" /><button id="pr_save">Save</button></div>
    <div class="row"><label>Saved</label><select id="pr_list"></select><button id="pr_load">Load</button><button id="pr_delete">Delete</button></div>
    <div class="row"><label>Params</label><span id="pr_info" class="status">—</span></div>
+   <h2 style="font-size:16px;margin-top:24px;">Configuration</h2>
+   <div class="row"><label>File</label><input id="cfg_path" type="text" value="aurivo-config.json" /></div>
+   <div class="row"><button id="cfg_save">Save config</button><button id="cfg_load">Load config</button></div>
    <h2 style="font-size:16px;margin-top:24px;">Vocal FX</h2>
    <div class="row"><label>Mode</label>
      <select id="vo_mode"><option value="0">Ring mod</option><option value="1">Robot</option><option value="2">Vowel formant</option><option value="3">Tremolo</option></select>
@@ -422,6 +425,27 @@
       catch(e) { alert('Delete failed: ' + e); }
     };
     refreshPresets();
+    document.getElementById('cfg_save').onclick = async () => {
+      const cfg = {
+        input_device: document.getElementById('input').value,
+        output_device: document.getElementById('output').value,
+        params: { gain_db: parseFloat(document.getElementById('gain').value) || 0 }
+      };
+      try { await invoke('save_config', { path: document.getElementById('cfg_path').value, cfg }); }
+      catch(e) { alert('Save config failed: ' + e); }
+    };
+    document.getElementById('cfg_load').onclick = async () => {
+      try {
+        const cfg = await invoke('load_config', { path: document.getElementById('cfg_path').value });
+        if (cfg.input_device) document.getElementById('input').value = cfg.input_device;
+        if (cfg.output_device) document.getElementById('output').value = cfg.output_device;
+        if (typeof cfg.params.gain_db === 'number') {
+          document.getElementById('gain').value = cfg.params.gain_db;
+          document.getElementById('gainval').textContent = cfg.params.gain_db;
+          await invoke('set_input_gain', { db: cfg.params.gain_db });
+        }
+      } catch(e) { alert('Load config failed: ' + e); }
+    };
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }

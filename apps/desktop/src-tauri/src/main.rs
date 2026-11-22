@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod config;
 mod presets;
 
 use aurivo_audio_engine::{AudioEngine, EqBandInfo};
+use config::Config;
 use aurivo_core::LevelMeter;
 use presets::Preset;
 use std::collections::BTreeMap;
@@ -176,6 +178,14 @@ fn apply_preset(state: State<'_, Mutex<AudioEngine>>, params: BTreeMap<String, f
     }
 }
 #[tauri::command]
+fn load_config(path: String) -> Result<Config, String> {
+    config::load(&path).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn save_config(path: String, cfg: Config) -> Result<(), String> {
+    config::save(&path, &cfg).map_err(|e| e.to_string())
+}
+#[tauri::command]
 fn set_vocal(state: State<'_, Mutex<AudioEngine>>, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
     state.lock().unwrap().set_vocal(mode, carrier_hz, vowel, depth, mix)
 }
@@ -185,15 +195,22 @@ fn get_vocal(state: State<'_, Mutex<AudioEngine>>) -> (i32, f32, f32, f32, f32) 
 }
 
 fn main() {
+    let engine = AudioEngine::new();
+    if let Ok(cfg) = config::load("aurivo-config.json") {
+        if let Some(&db) = cfg.params.get("gain_db") {
+            engine.set_input_gain_db(db);
+        }
+    }
     tauri::Builder::default()
-        .manage(Mutex::new(AudioEngine::new()))
+        .manage(Mutex::new(engine))
         .invoke_handler(tauri::generate_handler![
             list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
             set_delay, get_delay, set_reverb, get_reverb, set_distortion, get_distortion, set_modulation, get_modulation,
             get_eq_bands, set_eq_band, add_eq_band, remove_eq_band, set_pitch, get_pitch,
             spectrum, set_output_gain, get_output_gain, set_output_muted, is_output_muted,
             start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback,
-            list_presets, save_preset, load_preset, delete_preset, apply_preset, set_vocal, get_vocal
+            list_presets, save_preset, load_preset, delete_preset, apply_preset,
+            load_config, save_config, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");
