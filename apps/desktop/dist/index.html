@@ -45,6 +45,24 @@
      <span id="out_gainv">0 dB</span>
      <label><input id="out_mute" type="checkbox" /> Mute</label>
    </div>
+   <h2 style="font-size:16px;margin-top:24px;">Recorder</h2>
+   <div class="row">
+     <button id="rec_start">Record</button>
+     <button id="rec_stop">Stop</button>
+     <span id="rec_state">Idle</span>
+     <span id="rec_count">0 samples</span>
+   </div>
+   <div class="row">
+     <label>Save as</label>
+     <input id="rec_path" type="text" value="recording.wav" />
+     <button id="rec_save">Save WAV</button>
+   </div>
+   <div class="row">
+     <label>Play</label>
+     <input id="play_path" type="text" value="recording.wav" />
+     <button id="play_btn">Play</button>
+     <button id="play_stop">Stop playback</button>
+   </div>
    <h2 style="font-size:16px;margin-top:24px;">Delay / Echo</h2>
    <div class="row"><label>Time</label><input id="dl_time" type="range" min="20" max="1200" step="10" value="300" /><span id="dl_timev">300 ms</span></div>
    <div class="row"><label>Feedback</label><input id="dl_fb" type="range" min="0" max="0.95" step="0.01" value="0.35" /><span id="dl_fbv">0.35</span></div>
@@ -328,6 +346,25 @@
       requestAnimationFrame(drawSpectrum);
     }
     drawSpectrum();
+    document.getElementById('rec_start').onclick = async () => { await invoke('start_recording'); };
+    document.getElementById('rec_stop').onclick = async () => { await invoke('stop_recording'); };
+    document.getElementById('rec_save').onclick = async () => {
+      try { await invoke('save_recording', { path: document.getElementById('rec_path').value }); }
+      catch(e) { alert('Save failed: ' + e); }
+    };
+    document.getElementById('play_btn').onclick = async () => {
+      try { await invoke('play_wav', { path: document.getElementById('play_path').value }); }
+      catch(e) { alert('Playback failed: ' + e); }
+    };
+    document.getElementById('play_stop').onclick = async () => { await invoke('stop_playback'); };
+    setInterval(async () => {
+      try {
+        const rec = await invoke('is_recording');
+        const n = await invoke('recorded_samples');
+        document.getElementById('rec_state').textContent = rec ? 'Recording' : 'Idle';
+        document.getElementById('rec_count').textContent = n + ' samples';
+      } catch(e) {}
+    }, 250);
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }

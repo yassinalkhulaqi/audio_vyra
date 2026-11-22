@@ -1,4 +1,7 @@
+pub mod recorder;
+
 use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
+use recorder::{RecorderState, read_wav, write_wav};
 use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, SpectrumAnalyzer, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -32,6 +35,8 @@ pub struct AudioEngine {
     spectrum: Arc<Mutex<Vec<f32>>>,
     output_gain: Arc<AtomicU32>,
     output_muted: Arc<AtomicBool>,
+    recorder: Arc<Mutex<RecorderState>>,
+    playback_stream: Option<cpal::Stream>,
     vocal: Arc<Mutex<VocalParams>>,
     running: bool,
     sample_rate: u32,
@@ -67,6 +72,7 @@ impl AudioEngine {
         let analyzer = Arc::new(Mutex::new(analyzer));
         let output_gain = Arc::new(AtomicU32::new(1.0f32.to_bits()));
         let output_muted = Arc::new(AtomicBool::new(false));
+        let recorder = Arc::new(Mutex::new(RecorderState::new(sr, 1)));
         Self {
             host,
             input_stream: None,
@@ -84,6 +90,8 @@ impl AudioEngine {
             spectrum: spectrum_handle,
             output_gain,
             output_muted,
+            recorder,
+            playback_stream: None,
             vocal: vocal_shared,
             running: false,
             sample_rate: sr,
@@ -127,6 +135,7 @@ impl AudioEngine {
         let pipeline = self.pipeline.clone();
         let meter = self.meter.clone();
         let analyzer = self.analyzer.clone();
+        let recorder = self.recorder.clone();
         let in_stream = input_dev.build_input_stream(
             in_cfg.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
@@ -134,6 +143,7 @@ impl AudioEngine {
                 if let Ok(mut p) = pipeline.try_lock() { p.process(&mut buf); }
                 meter.process(&buf);
                 if let Ok(mut a) = analyzer.try_lock() { a.push(&buf); }
+                if let Ok(mut rec) = recorder.lock() { rec.push(&buf); }
                 let _ = prod.push_slice(&buf);
             },
             |err| eprintln!("input stream error: {err}"),
@@ -165,6 +175,10 @@ impl AudioEngine {
         self.running = true;
         self.sample_rate = sr;
         self.channels = ch;
+        if let Ok(mut rec) = self.recorder.lock() {
+            rec.sample_rate = sr;
+            rec.channels = ch;
+        }
         Ok(())
     }
 
@@ -278,6 +292,65 @@ impl AudioEngine {
 
     pub fn is_output_muted(&self) -> bool {
         self.output_muted.load(Ordering::Relaxed)
+    }
+
+    pub fn start_recording(&self) {
+        if let Ok(mut rec) = self.recorder.lock() { rec.start(); }
+    }
+
+    pub fn stop_recording(&self) {
+        if let Ok(mut rec) = self.recorder.lock() { rec.stop(); }
+    }
+
+    pub fn is_recording(&self) -> bool {
+        self.recorder.lock().map(|r| r.recording).unwrap_or(false)
+    }
+
+    pub fn recorded_samples(&self) -> usize {
+        self.recorder.lock().map(|r| r.samples.len()).unwrap_or(0)
+    }
+
+    pub fn save_recording(&self, path: &str) -> Result<()> {
+        let rec = self.recorder.lock().map_err(|_| AurivoError::InvalidConfig("recorder lock poisoned".into()))?;
+        let sr = if rec.sample_rate > 0 { rec.sample_rate } else { self.sample_rate };
+        write_wav(path, &rec.samples, sr, rec.channels)?;
+        Ok(())
+    }
+
+    pub fn play_wav(&mut self, path: &str) -> Result<()> {
+        self.playback_stream = None;
+        let decoded = read_wav(path)?;
+        let device = self.host.default_output_device().ok_or_else(|| AurivoError::DeviceNotFound("output".into()))?;
+        let cfg = device.default_output_config().map_err(|e| AurivoError::Stream(e.to_string()))?;
+        if cfg.sample_format() != cpal::SampleFormat::F32 {
+            return Err(AurivoError::Stream("output device does not support f32".into()));
+        }
+        let state = Arc::new(Mutex::new((decoded.samples, 0usize)));
+        let stream = device.build_output_stream(
+            cfg.into(),
+            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                if let Ok(mut guard) = state.lock() {
+                    let (samples, index) = &mut *guard;
+                    for d in data.iter_mut() {
+                        if *index < samples.len() {
+                            *d = samples[*index];
+                            *index += 1;
+                        } else {
+                            *d = 0.0;
+                        }
+                    }
+                }
+            },
+            |err| eprintln!("playback stream error: {err}"),
+            None,
+        ).map_err(|e| AurivoError::Stream(e.to_string()))?;
+        stream.play().map_err(|e| AurivoError::Stream(e.to_string()))?;
+        self.playback_stream = Some(stream);
+        Ok(())
+    }
+
+    pub fn stop_playback(&mut self) {
+        self.playback_stream = None;
     }
 
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
