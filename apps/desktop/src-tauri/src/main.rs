@@ -188,6 +188,14 @@ fn effect_enabled(state: State<'_, Mutex<AudioEngine>>, name: String) -> bool {
     state.lock().unwrap().effect_enabled(&name)
 }
 #[tauri::command]
+fn remove_effect(state: State<'_, Mutex<AudioEngine>>, name: String) -> bool {
+    state.lock().unwrap().remove_effect(&name)
+}
+#[tauri::command]
+fn move_effect(state: State<'_, Mutex<AudioEngine>>, name: String, delta: i32) -> bool {
+    state.lock().unwrap().move_effect(&name, delta)
+}
+#[tauri::command]
 fn set_vocal(state: State<'_, Mutex<AudioEngine>>, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
     state.lock().unwrap().set_vocal(mode, carrier_hz, vowel, depth, mix)
 }
@@ -206,7 +214,7 @@ fn main() {
             spectrum, set_output_gain, get_output_gain, set_output_muted, is_output_muted,
             start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback,
             list_presets, save_preset, load_preset, delete_preset, apply_preset,
-            list_effects, set_effect_enabled, effect_enabled, set_vocal, get_vocal
+            list_effects, set_effect_enabled, effect_enabled, remove_effect, move_effect, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");

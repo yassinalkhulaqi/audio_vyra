@@ -25,6 +25,14 @@ impl ProcessingPipeline {
     pub fn set_bypass(&mut self, index: usize, b: bool) {
         if let Some(p) = self.processors.get_mut(index) { p.set_bypass(b); }
     }
+    pub fn remove(&mut self, index: usize) -> Option<Box<dyn AudioProcessor>> {
+        if index < self.processors.len() { Some(self.processors.remove(index)) } else { None }
+    }
+    pub fn swap(&mut self, a: usize, b: usize) {
+        if a < self.processors.len() && b < self.processors.len() {
+            self.processors.swap(a, b);
+        }
+    }
 }
 
 use crate::gain::Gain;
