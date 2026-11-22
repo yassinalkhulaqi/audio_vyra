@@ -41,4 +41,5 @@ pub struct DeviceInfo {
 pub struct LevelMeter {
     pub peak: f32,
     pub rms: f32,
+    pub clipped: bool,
 }

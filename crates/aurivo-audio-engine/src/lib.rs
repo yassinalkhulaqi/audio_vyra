@@ -239,7 +239,10 @@ impl AudioEngine {
     pub fn stream_info(&self) -> (u32, u32, u16) {
         (self.sample_rate, self.output_sample_rate, self.channels)
     }
-    pub fn levels(&self) -> LevelMeter { LevelMeter { peak: self.meter.peak(), rms: self.meter.rms() } }
+    pub fn levels(&self) -> LevelMeter {
+        LevelMeter { peak: self.meter.peak(), rms: self.meter.rms(), clipped: self.meter.clipped() }
+    }
+    pub fn reset_clip(&self) { self.meter.reset_clip(); }
     pub fn set_input_gain_db(&self, db: f32) { self.gain.store(db.to_bits(), Ordering::Relaxed); }
 
     pub fn set_delay(&self, time_ms: f32, feedback: f32, mix: f32, damp: f32) {
