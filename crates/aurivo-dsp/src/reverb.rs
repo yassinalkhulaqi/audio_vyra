@@ -3,6 +3,7 @@
 //! high-frequency absorption in the comb feedback path.
 
 use std::sync::{Arc, Mutex};
+use crate::denormal::flush;
 
 #[derive(Debug, Clone)]
 pub struct ReverbParams {
@@ -32,7 +33,7 @@ impl Comb {
 
     fn process(&mut self, input: f32, feedback: f32, damp: f32) -> f32 {
         let out = self.buffer[self.index];
-        self.filtered = out * (1.0 - damp) + self.filtered * damp;
+        self.filtered = flush(out * (1.0 - damp) + self.filtered * damp);
         self.buffer[self.index] = input + self.filtered * feedback;
         self.index = (self.index + 1) % self.buffer.len();
         out
