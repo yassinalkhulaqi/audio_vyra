@@ -15,7 +15,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
 use serde::{Deserialize, Serialize};
 pub use state::AppState;
-use std::sync::{Arc, Mutex, atomic::{AtomicU32, AtomicBool, Ordering}};
+use std::sync::{Arc, Mutex, atomic::{AtomicU32, AtomicU64, AtomicBool, Ordering}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EqBandInfo {
@@ -44,6 +44,8 @@ pub struct AudioEngine {
     output_gain: Arc<AtomicU32>,
     output_muted: Arc<AtomicBool>,
     recorder: Arc<Mutex<RecorderState>>,
+    overruns: Arc<AtomicU64>,
+    underruns: Arc<AtomicU64>,
     resampler: Arc<Mutex<LinearResampler>>,
     playback_stream: Option<cpal::Stream>,
     vocal: Arc<Mutex<VocalParams>>,
@@ -84,6 +86,8 @@ impl AudioEngine {
         let output_muted = Arc::new(AtomicBool::new(false));
         let recorder = Arc::new(Mutex::new(RecorderState::new(sr, 1)));
         let resampler = Arc::new(Mutex::new(LinearResampler::new(sr, sr)));
+        let overruns = Arc::new(AtomicU64::new(0));
+        let underruns = Arc::new(AtomicU64::new(0));
         Self {
             host,
             input_stream: None,
@@ -102,6 +106,8 @@ impl AudioEngine {
             output_gain,
             output_muted,
             recorder,
+            overruns,
+            underruns,
             resampler,
             playback_stream: None,
             vocal: vocal_shared,
@@ -150,6 +156,8 @@ impl AudioEngine {
 
         let chain = self.chain.clone();
         let meter = self.meter.clone();
+        let overruns = self.overruns.clone();
+        let underruns = self.underruns.clone();
         let analyzer = self.analyzer.clone();
         let recorder = self.recorder.clone();
         let in_stream = input_dev.build_input_stream(
@@ -162,7 +170,10 @@ impl AudioEngine {
                 if let Ok(mut rec) = recorder.lock() { rec.push(&buf); }
                 let mut expanded = vec![0.0f32; buf.len() * ch as usize];
                 expand(&buf, ch, &mut expanded);
-                let _ = prod.push_slice(&expanded);
+                let pushed = prod.push_slice(&expanded);
+                if pushed < expanded.len() {
+                    overruns.fetch_add((expanded.len() - pushed) as u64, Ordering::Relaxed);
+                }
             },
             |err| eprintln!("input stream error: {err}"),
             None,
@@ -181,7 +192,10 @@ impl AudioEngine {
                 } else {
                     cons.pop_slice(data)
                 };
-                if n < data.len() { data[n..].fill(0.0); }
+                if n < data.len() {
+                    underruns.fetch_add((data.len() - n) as u64, Ordering::Relaxed);
+                    data[n..].fill(0.0);
+                }
                 let muted = output_muted.load(Ordering::Relaxed);
                 let gain = f32::from_bits(output_gain.load(Ordering::Relaxed));
                 for s in data.iter_mut() {
@@ -215,6 +229,13 @@ impl AudioEngine {
     }
 
     pub fn is_running(&self) -> bool { self.running }
+    pub fn audio_stats(&self) -> (u64, u64) {
+        (self.overruns.load(Ordering::Relaxed), self.underruns.load(Ordering::Relaxed))
+    }
+    pub fn reset_audio_stats(&self) {
+        self.overruns.store(0, Ordering::Relaxed);
+        self.underruns.store(0, Ordering::Relaxed);
+    }
     pub fn stream_info(&self) -> (u32, u32, u16) {
         (self.sample_rate, self.output_sample_rate, self.channels)
     }

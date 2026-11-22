@@ -60,6 +60,10 @@
     <textarea id="st_json" rows="5"></textarea>
   </div>
   <div class="panel">
+    <h2>Audio health</h2>
+    <div class="row"><span id="audio_stats" class="status">overruns 0 · underruns 0</span><button id="stats_reset">Reset</button></div>
+  </div>
+  <div class="panel">
     <h2>Effects (enable / bypass)</h2>
     <div class="row" id="fx_toggles" style="flex-wrap:wrap;"></div>
   </div>
@@ -153,6 +157,8 @@
         const rms = l.rms || 0;
         document.getElementById('bar').style.width = Math.min(100, rms*200) + '%';
         document.getElementById('lvl').textContent = rms.toFixed(3);
+        const st = await invoke('audio_stats');
+        document.getElementById('audio_stats').textContent = `overruns ${st[0]} · underruns ${st[1]}`;
       } catch(e) {}
     }, 100);
     let dl = [300, 0.35, 0.3, 0.2];
@@ -507,6 +513,7 @@
         }
       } catch(e) { alert('Load config failed: ' + e); }
     };
+    document.getElementById('stats_reset').onclick = async () => { await invoke('reset_audio_stats'); };
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
