@@ -1,3 +1,4 @@
+pub mod denormal;
 pub mod gain;
 pub mod meter;
 pub mod gate;

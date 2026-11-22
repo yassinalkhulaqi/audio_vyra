@@ -1,4 +1,6 @@
 ﻿#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use crate::denormal::flush;
+
 pub enum BiquadType { LowPass, HighPass, Peak { gain_db: i32 } }
 
 #[derive(Debug, Clone)]
@@ -42,8 +44,8 @@ impl Biquad {
         for s in samples.iter_mut() {
             let x = *s;
             let y = self.b0 * x + self.z1;
-            self.z1 = self.b1 * x - self.a1 * y + self.z2;
-            self.z2 = self.b2 * x - self.a2 * y;
+            self.z1 = flush(self.b1 * x - self.a1 * y + self.z2);
+            self.z2 = flush(self.b2 * x - self.a2 * y);
             *s = y;
         }
     }

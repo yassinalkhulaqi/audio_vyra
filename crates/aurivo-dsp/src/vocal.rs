@@ -3,6 +3,7 @@
 //! five vowels and can be morphed continuously by a fractional vowel index.
 
 use std::sync::{Arc, Mutex};
+use crate::denormal::flush;
 
 #[derive(Debug, Clone)]
 pub struct VocalParams {
@@ -63,8 +64,8 @@ impl Bandpass {
 
     fn process(&mut self, x: f32) -> f32 {
         let y = self.b0 * x + self.z1;
-        self.z1 = self.b1 * x - self.a1 * y + self.z2;
-        self.z2 = self.b2 * x - self.a2 * y;
+        self.z1 = flush(self.b1 * x - self.a1 * y + self.z2);
+        self.z2 = flush(self.b2 * x - self.a2 * y);
         y
     }
 }
