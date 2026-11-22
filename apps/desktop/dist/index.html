@@ -49,6 +49,11 @@
     <div class="row"><label><input id="out_mute" type="checkbox" /> Mute</label></div>
   </div>
   <div class="panel">
+    <h2>Configuration</h2>
+    <div class="row"><input id="cfg_path" type="text" value="aurivo-config.json" /></div>
+    <div class="row"><button id="cfg_save">Save config</button><button id="cfg_load">Load config</button></div>
+  </div>
+  <div class="panel">
     <h2>Session state</h2>
     <div class="row"><button id="st_dump">Dump state</button><button id="st_apply">Apply state</button></div>
     <textarea id="st_json" rows="5"></textarea>
@@ -480,6 +485,24 @@
     document.getElementById('st_apply').onclick = async () => {
       try { await invoke('set_state', { newState: JSON.parse(document.getElementById('st_json').value) }); }
       catch(e) { alert('Apply failed: ' + e); }
+    };
+    document.getElementById('cfg_save').onclick = async () => {
+      const cfg = { input_device: document.getElementById('input').value, output_device: document.getElementById('output').value,
+        params: { gain_db: parseFloat(document.getElementById('gain').value) || 0 } };
+      try { await invoke('save_config', { path: document.getElementById('cfg_path').value, cfg }); }
+      catch(e) { alert('Save config failed: ' + e); }
+    };
+    document.getElementById('cfg_load').onclick = async () => {
+      try {
+        const cfg = await invoke('load_config', { path: document.getElementById('cfg_path').value });
+        if (cfg.input_device) document.getElementById('input').value = cfg.input_device;
+        if (cfg.output_device) document.getElementById('output').value = cfg.output_device;
+        if (typeof cfg.params.gain_db === 'number') {
+          document.getElementById('gain').value = cfg.params.gain_db;
+          document.getElementById('gainval').textContent = cfg.params.gain_db;
+          await invoke('set_input_gain', { db: cfg.params.gain_db });
+        }
+      } catch(e) { alert('Load config failed: ' + e); }
     };
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
