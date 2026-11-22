@@ -147,8 +147,12 @@ fn list_presets(dir: String) -> Result<Vec<String>, String> {
     presets::list(&dir).map_err(|e| e.to_string())
 }
 #[tauri::command]
-fn save_preset(dir: String, name: String, params: BTreeMap<String, f32>) -> Result<(), String> {
-    presets::save(&dir, &name, params).map_err(|e| e.to_string())
+fn save_preset(dir: String, preset: Preset) -> Result<(), String> {
+    presets::save(&dir, &preset).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn install_factory_presets(dir: String) -> Result<Vec<String>, String> {
+    presets::install_factory(&dir).map_err(|e| e.to_string())
 }
 #[tauri::command]
 fn load_preset(dir: String, name: String) -> Result<Preset, String> {
@@ -161,18 +165,25 @@ fn delete_preset(dir: String, name: String) -> Result<(), String> {
 #[tauri::command]
 fn apply_preset(state: State<'_, Mutex<AudioEngine>>, params: BTreeMap<String, f32>) {
     let engine = state.lock().unwrap();
-    if let Some(&db) = params.get("gain_db") {
-        engine.set_input_gain_db(db);
+    let get = |k: &str| params.get(k).copied();
+    if let Some(v) = get("gain_db") { engine.set_input_gain_db(v); }
+    if let Some(v) = get("output_gain_db") { engine.set_output_gain_db(v); }
+    if let Some(v) = get("output_muted") { engine.set_output_muted(v != 0.0); }
+    if let (Some(a), Some(b), Some(c), Some(d)) = (get("delay_time"), get("delay_feedback"), get("delay_mix"), get("delay_damp")) {
+        engine.set_delay(a, b, c, d);
     }
-    const VOCAL_KEYS: [&str; 5] = ["vocal_mode", "vocal_carrier_hz", "vocal_vowel", "vocal_depth", "vocal_mix"];
-    if VOCAL_KEYS.iter().any(|k| params.contains_key(*k)) {
-        let cur = engine.vocal_params();
-        let mode = params.get("vocal_mode").map(|&v| v as i32).unwrap_or(cur.0);
-        let carrier_hz = params.get("vocal_carrier_hz").copied().unwrap_or(cur.1);
-        let vowel = params.get("vocal_vowel").copied().unwrap_or(cur.2);
-        let depth = params.get("vocal_depth").copied().unwrap_or(cur.3);
-        let mix = params.get("vocal_mix").copied().unwrap_or(cur.4);
-        engine.set_vocal(mode, carrier_hz, vowel, depth, mix);
+    if let (Some(a), Some(b), Some(c), Some(d)) = (get("reverb_room"), get("reverb_damp"), get("reverb_wet"), get("reverb_dry")) {
+        engine.set_reverb(a, b, c, d);
+    }
+    if let (Some(a), Some(b), Some(c), Some(d), Some(e), Some(f)) = (get("dist_mode"), get("dist_drive"), get("dist_tone"), get("dist_mix"), get("dist_down"), get("dist_bits")) {
+        engine.set_distortion(a as i32, b, c, d, e, f);
+    }
+    if let (Some(a), Some(b), Some(c), Some(d), Some(e)) = (get("mod_mode"), get("mod_rate"), get("mod_depth"), get("mod_fb"), get("mod_mix")) {
+        engine.set_modulation(a as i32, b, c, d, e);
+    }
+    if let Some(v) = get("pitch") { engine.set_pitch_semitones(v); }
+    if let (Some(a), Some(b), Some(c), Some(d), Some(e)) = (get("vocal_mode"), get("vocal_carrier"), get("vowel"), get("vocal_depth"), get("vocal_mix")) {
+        engine.set_vocal(a as i32, b, c, d, e);
     }
 }
 #[tauri::command]
@@ -193,7 +204,7 @@ fn main() {
             get_eq_bands, set_eq_band, add_eq_band, remove_eq_band, set_pitch, get_pitch,
             spectrum, set_output_gain, get_output_gain, set_output_muted, is_output_muted,
             start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback,
-            list_presets, save_preset, load_preset, delete_preset, apply_preset, set_vocal, get_vocal
+            list_presets, save_preset, load_preset, delete_preset, install_factory_presets, apply_preset, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");
