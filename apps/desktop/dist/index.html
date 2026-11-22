@@ -83,7 +83,7 @@
     <h2>Presets</h2>
     <div class="row"><input id="pr_dir" type="text" value="presets" /></div>
     <div class="row"><input id="pr_name" type="text" value="My Voice" /><button id="pr_save">Save</button></div>
-    <div class="row"><select id="pr_list"></select><button id="pr_load">Load</button><button id="pr_delete">Delete</button></div>
+    <div class="row"><select id="pr_list"></select><button id="pr_load">Load</button><button id="pr_delete">Delete</button><button id="pr_factory">Factory</button></div>
     <div class="status" id="pr_info">—</div>
   </div>
 </aside>
@@ -394,14 +394,18 @@
       } catch(e) {}
     }, 250);
     const prDir = () => document.getElementById('pr_dir').value;
+    const num = (id) => parseFloat(document.getElementById(id).value) || 0;
     function collectPresetParams() {
       return {
-        gain_db: parseFloat(document.getElementById('gain').value) || 0,
-        vocal_mode: vo[0],
-        vocal_carrier_hz: vo[1],
-        vocal_vowel: vo[2],
-        vocal_depth: vo[3],
-        vocal_mix: vo[4],
+        gain_db: num('gain'), output_gain_db: num('out_gain'),
+        output_muted: document.getElementById('out_mute').checked ? 1 : 0,
+        delay_time: num('dl_time'), delay_feedback: num('dl_fb'), delay_mix: num('dl_mix'), delay_damp: num('dl_damp'),
+        reverb_room: num('rv_room'), reverb_damp: num('rv_damp'), reverb_wet: num('rv_wet'), reverb_dry: num('rv_dry'),
+        dist_mode: num('ds_mode'), dist_drive: num('ds_drive'), dist_tone: num('ds_tone'),
+        dist_mix: num('ds_mix'), dist_down: num('ds_down'), dist_bits: num('ds_bits'),
+        mod_mode: num('mo_mode'), mod_rate: num('mo_rate'), mod_depth: num('mo_depth'), mod_fb: num('mo_fb'), mod_mix: num('mo_mix'),
+        pitch: num('pitch'),
+        vocal_mode: vo[0], vocal_carrier: vo[1], vowel: vo[2], vocal_depth: vo[3], vocal_mix: vo[4],
       };
     }
     async function refreshPresets() {
@@ -411,31 +415,39 @@
       } catch(e) {}
     }
     document.getElementById('pr_save').onclick = async () => {
-      try {
-        await invoke('save_preset', { dir: prDir(), name: document.getElementById('pr_name').value, params: collectPresetParams() });
-        refreshPresets();
-      } catch(e) { alert('Save failed: ' + e); }
+      const preset = { name: document.getElementById('pr_name').value, params: collectPresetParams(), enabled: {}, chain: [] };
+      try { await invoke('save_preset', { dir: prDir(), preset }); refreshPresets(); }
+      catch(e) { alert('Save failed: ' + e); }
     };
     document.getElementById('pr_load').onclick = async () => {
       const name = document.getElementById('pr_list').value;
       if (!name) return;
       try {
         const p = await invoke('load_preset', { dir: prDir(), name });
-        document.getElementById('pr_info').textContent = JSON.stringify(p.params);
         await invoke('apply_preset', { params: p.params });
-        if (typeof p.params.gain_db === 'number') {
-          const g = document.getElementById('gain');
-          g.value = p.params.gain_db;
-          document.getElementById('gainval').textContent = p.params.gain_db;
+        const sliders = [
+          ['gain','gain_db',''], ['out_gain','output_gain_db',' dB'],
+          ['dl_time','delay_time',' ms'], ['dl_fb','delay_feedback',''], ['dl_mix','delay_mix',''], ['dl_damp','delay_damp',''],
+          ['rv_room','reverb_room',''], ['rv_damp','reverb_damp',''], ['rv_wet','reverb_wet',''], ['rv_dry','reverb_dry',''],
+          ['ds_drive','dist_drive',' dB'], ['ds_tone','dist_tone',''], ['ds_mix','dist_mix',''], ['ds_down','dist_down','x'], ['ds_bits','dist_bits',''],
+          ['mo_rate','mod_rate',' Hz'], ['mo_depth','mod_depth',''], ['mo_fb','mod_fb',''], ['mo_mix','mod_mix',''],
+          ['pitch','pitch',' st'],
+        ];
+        for (const [elId, key, suffix] of sliders) {
+          const v = p.params[key];
+          if (typeof v !== 'number') continue;
+          document.getElementById(elId).value = v;
+          const dispId = elId === 'gain' ? 'gainval' : (elId === 'pitch' ? 'pitchval' : elId + 'v');
+          const disp = document.getElementById(dispId);
+          if (disp) disp.textContent = v + suffix;
         }
-        const map = { mode: 'vocal_mode', car: 'vocal_carrier_hz', vowel: 'vocal_vowel', depth: 'vocal_depth', mix: 'vocal_mix' };
-        Object.entries(map).forEach(([key, pk]) => {
-          if (typeof p.params[pk] === 'number') {
-            const idx = { mode: 0, car: 1, vowel: 2, depth: 3, mix: 4 }[key];
-            vo[idx] = p.params[pk];
-          }
-        });
+        if (typeof p.params.output_muted === 'number') document.getElementById('out_mute').checked = p.params.output_muted === 1;
+        if (typeof p.params.dist_mode === 'number') document.getElementById('ds_mode').value = p.params.dist_mode;
+        if (typeof p.params.mod_mode === 'number') document.getElementById('mo_mode').value = p.params.mod_mode;
+        const vm = [['vocal_mode',0],['vocal_carrier',1],['vowel',2],['vocal_depth',3],['vocal_mix',4]];
+        vm.forEach(([k,i]) => { if (typeof p.params[k] === 'number') vo[i] = p.params[k]; });
         syncVocalUI();
+        document.getElementById('pr_info').textContent = Object.keys(p.params).length + ' params';
       } catch(e) { alert('Load failed: ' + e); }
     };
     document.getElementById('pr_delete').onclick = async () => {
@@ -443,6 +455,10 @@
       if (!name) return;
       try { await invoke('delete_preset', { dir: prDir(), name }); refreshPresets(); }
       catch(e) { alert('Delete failed: ' + e); }
+    };
+    document.getElementById('pr_factory').onclick = async () => {
+      try { await invoke('install_factory_presets', { dir: prDir() }); refreshPresets(); }
+      catch(e) { alert('Install failed: ' + e); }
     };
     refreshPresets();
     (async () => {
