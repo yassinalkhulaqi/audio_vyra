@@ -353,6 +353,29 @@ impl AudioEngine {
         self.playback_stream = None;
     }
 
+    pub fn effect_names(&self) -> Vec<String> {
+        self.pipeline.lock()
+            .map(|p| p.names().iter().map(|s| s.to_string()).collect())
+            .unwrap_or_default()
+    }
+
+    pub fn set_effect_enabled(&self, name: &str, enabled: bool) -> bool {
+        if let Ok(mut p) = self.pipeline.lock() {
+            if let Some(i) = p.find(name) {
+                p.set_bypass(i, !enabled);
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn effect_enabled(&self, name: &str) -> bool {
+        self.pipeline.lock()
+            .ok()
+            .and_then(|p| p.find(name).map(|i| !p.bypass(i)))
+            .unwrap_or(false)
+    }
+
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
         Vocal::update(&self.vocal, VocalParams { mode, carrier_hz, vowel, depth, mix });
     }
