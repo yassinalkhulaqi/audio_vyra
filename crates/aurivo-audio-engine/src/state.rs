@@ -23,7 +23,7 @@ pub struct AppState {
 
 impl Default for AppState {
     fn default() -> Self {
-        let chain = vec![
+        let chain: Vec<String> = vec![
             "gain", "gate", "compressor", "highpass", "delay", "reverb",
             "distortion", "modulation", "eq", "pitch", "vocal",
         ]
