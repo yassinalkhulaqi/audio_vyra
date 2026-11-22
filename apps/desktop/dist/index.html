@@ -44,6 +44,7 @@
   <div class="panel">
     <h2>Spectrum</h2>
     <canvas id="spectrum" width="512" height="140"></canvas>
+    <canvas id="rms_chart" width="512" height="40"></canvas>
   </div>
   <div class="panel">
     <h2>Output</h2>
@@ -158,6 +159,7 @@
         const rms = l.rms || 0;
         document.getElementById('bar').style.width = Math.min(100, rms*200) + '%';
         document.getElementById('lvl').textContent = rms.toFixed(3);
+        rmsHistory.push(rms); rmsHistory.shift(); drawRms();
         document.getElementById('bar').style.background = l.clipped ? '#d29922' : '#2ea043';
         document.getElementById('clip').style.color = l.clipped ? '#f85149' : '#8b949e';
         const st = await invoke('audio_stats');
@@ -357,23 +359,47 @@
     })();
     const canvas = document.getElementById('spectrum');
     const ctx = canvas.getContext('2d');
+    let peakHold = [];
     async function drawSpectrum() {
       try {
         const bins = await invoke('spectrum');
         ctx.clearRect(0,0,canvas.width,canvas.height);
         if (bins.length) {
-          const bw = canvas.width / bins.length;
+          const logMax = Math.log(bins.length + 1);
+          while (peakHold.length < bins.length) peakHold.push(-120);
           for (let i=0;i<bins.length;i++) {
             const db = bins[i];
+            const x = Math.log(i + 1) / logMax * canvas.width;
+            const xNext = Math.log(i + 2) / logMax * canvas.width;
             const h = Math.max(0, Math.min(1, (db + 90) / 90)) * canvas.height;
             ctx.fillStyle = '#2ea043';
-            ctx.fillRect(i*bw, canvas.height-h, Math.max(1,bw), h);
+            ctx.fillRect(x, canvas.height-h, Math.max(1, xNext-x), h);
+            if (db > peakHold[i]) peakHold[i] = db;
+            else peakHold[i] = Math.max(db, peakHold[i] - 1.5);
+            const ph = Math.max(0, Math.min(1, (peakHold[i] + 90) / 90)) * canvas.height;
+            ctx.fillStyle = '#f85149';
+            ctx.fillRect(x, canvas.height-ph, Math.max(1, xNext-x), 2);
           }
         }
       } catch(e) {}
       requestAnimationFrame(drawSpectrum);
     }
     drawSpectrum();
+    const rmsCanvas = document.getElementById('rms_chart');
+    const rmsCtx = rmsCanvas.getContext('2d');
+    const rmsHistory = new Array(120).fill(0);
+    function drawRms() {
+      rmsCtx.clearRect(0,0,rmsCanvas.width,rmsCanvas.height);
+      rmsCtx.strokeStyle = '#2ea043';
+      rmsCtx.lineWidth = 2;
+      rmsCtx.beginPath();
+      rmsHistory.forEach((v,i) => {
+        const x = i / (rmsHistory.length - 1) * rmsCanvas.width;
+        const y = rmsCanvas.height - Math.min(1, v * 3) * rmsCanvas.height;
+        if (i === 0) rmsCtx.moveTo(x, y); else rmsCtx.lineTo(x, y);
+      });
+      rmsCtx.stroke();
+    }
     document.getElementById('rec_start').onclick = async () => { await invoke('start_recording'); };
     document.getElementById('rec_stop').onclick = async () => { await invoke('stop_recording'); };
     document.getElementById('rec_save').onclick = async () => {
