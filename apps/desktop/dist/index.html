@@ -33,6 +33,7 @@
   <div class="panel">
     <h2>Transport</h2>
     <div class="status" id="status">Stopped</div>
+    <div class="status" id="stream_info">—</div>
     <div class="row"><label>Input</label><select id="input"></select></div>
     <div class="row"><label>Output</label><select id="output"></select></div>
     <div class="row"><button id="start">Start</button><button id="stop">Stop</button></div>
@@ -134,6 +135,8 @@
     document.getElementById('start').onclick = async () => {
       await invoke('start_engine', { input: document.getElementById('input').value, output: document.getElementById('output').value });
       document.getElementById('status').textContent = 'Running';
+      const si = await invoke('stream_info');
+      document.getElementById('stream_info').textContent = `in ${si[0]} Hz · out ${si[1]} Hz · ${si[2]} ch` + (si[0] !== si[1] ? ' (resampling)' : '');
     };
     document.getElementById('stop').onclick = async () => {
       await invoke('stop_engine');
