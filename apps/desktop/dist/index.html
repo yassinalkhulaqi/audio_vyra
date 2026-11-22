@@ -45,6 +45,8 @@
      <span id="out_gainv">0 dB</span>
      <label><input id="out_mute" type="checkbox" /> Mute</label>
    </div>
+   <h2 style="font-size:16px;margin-top:24px;">Effects (enable / bypass)</h2>
+   <div class="row" id="fx_toggles" style="flex-wrap:wrap;"></div>
    <h2 style="font-size:16px;margin-top:24px;">Recorder</h2>
    <div class="row">
      <button id="rec_start">Record</button>
@@ -422,6 +424,22 @@
       catch(e) { alert('Delete failed: ' + e); }
     };
     refreshPresets();
+    (async () => {
+      try {
+        const names = await invoke('list_effects');
+        const box = document.getElementById('fx_toggles');
+        for (const n of names) {
+          const label = document.createElement('label');
+          label.style.marginRight = '14px';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = await invoke('effect_enabled', { name: n });
+          cb.onchange = async () => { await invoke('set_effect_enabled', { name: n, enabled: cb.checked }); };
+          label.append(cb, document.createTextNode(' ' + n));
+          box.appendChild(label);
+        }
+      } catch(e) {}
+    })();
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
