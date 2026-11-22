@@ -12,6 +12,7 @@
   .meter { width:300px; height:12px; background:#21262d; border-radius:6px; overflow:hidden; }
   .bar { height:100%; width:0%; background:#2ea043; }
   .status { font-size:14px; color:#8b949e; }
+  canvas { width:100%; height:140px; background:#0d1117; border:1px solid #30363d; border-radius:8px; }
 </style>
 </head>
 <body>
@@ -34,6 +35,15 @@
      <label>Level</label>
      <div class="meter"><div class="bar" id="bar"></div></div>
      <span id="lvl">0.000</span>
+   </div>
+   <h2 style="font-size:16px;margin-top:24px;">Spectrum</h2>
+   <canvas id="spectrum" width="512" height="140"></canvas>
+   <h2 style="font-size:16px;margin-top:24px;">Output</h2>
+   <div class="row">
+     <label>Out gain</label>
+     <input id="out_gain" type="range" min="-24" max="24" step="0.5" value="0" />
+     <span id="out_gainv">0 dB</span>
+     <label><input id="out_mute" type="checkbox" /> Mute</label>
    </div>
    <h2 style="font-size:16px;margin-top:24px;">Delay / Echo</h2>
    <div class="row"><label>Time</label><input id="dl_time" type="range" min="20" max="1200" step="10" value="300" /><span id="dl_timev">300 ms</span></div>
@@ -284,6 +294,40 @@
       pitch.value = v;
       document.getElementById('pitchval').textContent = v + ' st';
     })();
+    const outGain = document.getElementById('out_gain');
+    outGain.oninput = async (e) => {
+      const v = parseFloat(e.target.value);
+      document.getElementById('out_gainv').textContent = v + ' dB';
+      await invoke('set_output_gain', { db: v });
+    };
+    document.getElementById('out_mute').onchange = async (e) => {
+      await invoke('set_output_muted', { muted: e.target.checked });
+    };
+    (async () => {
+      const db = await invoke('get_output_gain');
+      outGain.value = db;
+      document.getElementById('out_gainv').textContent = db.toFixed(1) + ' dB';
+      document.getElementById('out_mute').checked = await invoke('is_output_muted');
+    })();
+    const canvas = document.getElementById('spectrum');
+    const ctx = canvas.getContext('2d');
+    async function drawSpectrum() {
+      try {
+        const bins = await invoke('spectrum');
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        if (bins.length) {
+          const bw = canvas.width / bins.length;
+          for (let i=0;i<bins.length;i++) {
+            const db = bins[i];
+            const h = Math.max(0, Math.min(1, (db + 90) / 90)) * canvas.height;
+            ctx.fillStyle = '#2ea043';
+            ctx.fillRect(i*bw, canvas.height-h, Math.max(1,bw), h);
+          }
+        }
+      } catch(e) {}
+      requestAnimationFrame(drawSpectrum);
+    }
+    drawSpectrum();
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }

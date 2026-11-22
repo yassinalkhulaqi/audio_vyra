@@ -91,6 +91,26 @@ fn get_pitch(state: State<'_, Mutex<AudioEngine>>) -> f32 {
     state.lock().unwrap().pitch_semitones()
 }
 #[tauri::command]
+fn spectrum(state: State<'_, Mutex<AudioEngine>>) -> Vec<f32> {
+    state.lock().unwrap().spectrum()
+}
+#[tauri::command]
+fn set_output_gain(state: State<'_, Mutex<AudioEngine>>, db: f32) {
+    state.lock().unwrap().set_output_gain_db(db)
+}
+#[tauri::command]
+fn get_output_gain(state: State<'_, Mutex<AudioEngine>>) -> f32 {
+    state.lock().unwrap().output_gain_db()
+}
+#[tauri::command]
+fn set_output_muted(state: State<'_, Mutex<AudioEngine>>, muted: bool) {
+    state.lock().unwrap().set_output_muted(muted)
+}
+#[tauri::command]
+fn is_output_muted(state: State<'_, Mutex<AudioEngine>>) -> bool {
+    state.lock().unwrap().is_output_muted()
+}
+#[tauri::command]
 fn set_vocal(state: State<'_, Mutex<AudioEngine>>, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
     state.lock().unwrap().set_vocal(mode, carrier_hz, vowel, depth, mix)
 }
@@ -105,7 +125,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
             set_delay, get_delay, set_reverb, get_reverb, set_distortion, get_distortion, set_modulation, get_modulation,
-            get_eq_bands, set_eq_band, add_eq_band, remove_eq_band, set_pitch, get_pitch, set_vocal, get_vocal
+            get_eq_bands, set_eq_band, add_eq_band, remove_eq_band, set_pitch, get_pitch,
+            spectrum, set_output_gain, get_output_gain, set_output_muted, is_output_muted, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
         .expect("error running AURIVO");
