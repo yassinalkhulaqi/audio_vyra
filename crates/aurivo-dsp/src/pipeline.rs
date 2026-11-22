@@ -18,6 +18,14 @@ impl ProcessingPipeline {
         }
     }
     pub fn len(&self) -> usize { self.processors.len() }
+    pub fn remove(&mut self, index: usize) -> Option<Box<dyn AudioProcessor>> {
+        if index < self.processors.len() { Some(self.processors.remove(index)) } else { None }
+    }
+    pub fn swap(&mut self, a: usize, b: usize) {
+        if a < self.processors.len() && b < self.processors.len() {
+            self.processors.swap(a, b);
+        }
+    }
 }
 
 use crate::gain::Gain;

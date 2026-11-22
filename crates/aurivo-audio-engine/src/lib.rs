@@ -1,8 +1,10 @@
+pub mod chain;
 pub mod recorder;
 
-use aurivo_core::{AudioConfig, DeviceInfo, AurivoError, Result, LevelMeter};
+use aurivo_core::{AurivoError, Result, LevelMeter};
+use chain::EffectChain;
 use recorder::{RecorderState, read_wav, write_wav};
-use aurivo_dsp::{ProcessingPipeline, AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, SpectrumAnalyzer, Vocal, VocalParams};
+use aurivo_dsp::{AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, SpectrumAnalyzer, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
@@ -22,7 +24,7 @@ pub struct AudioEngine {
     host: cpal::Host,
     input_stream: Option<cpal::Stream>,
     output_stream: Option<cpal::Stream>,
-    pipeline: Arc<Mutex<ProcessingPipeline>>,
+    chain: Arc<Mutex<EffectChain>>,
     meter: Arc<LevelMeterProcessor>,
     gain: Arc<AtomicU32>,
     delay: Arc<Mutex<DelayParams>>,
@@ -48,25 +50,25 @@ impl AudioEngine {
         let host = cpal::default_host();
         let sr = 48000u32;
         let (gain_proc, gain_shared) = Gain::shared();
-        let mut pipeline = ProcessingPipeline::new(sr);
-        pipeline.add(Box::new(gain_proc));
-        pipeline.add(Box::new(NoiseGate::new(-40.0, 5.0, 50.0, sr as f32)));
-        pipeline.add(Box::new(Compressor::new(-18.0, 3.0, 10.0, 100.0, 2.0, sr as f32)));
-        pipeline.add(Box::new(Biquad::new_highpass(80.0, 0.707, sr as f32)));
+        let mut chain = EffectChain::new(sr);
+        chain.add("gain", Box::new(gain_proc));
+        chain.add("gate", Box::new(NoiseGate::new(-40.0, 5.0, 50.0, sr as f32)));
+        chain.add("compressor", Box::new(Compressor::new(-18.0, 3.0, 10.0, 100.0, 2.0, sr as f32)));
+        chain.add("highpass", Box::new(Biquad::new_highpass(80.0, 0.707, sr as f32)));
         let (delay_proc, delay_shared) = Delay::shared(sr);
-        pipeline.add(Box::new(delay_proc));
+        chain.add("delay", Box::new(delay_proc));
         let (reverb_proc, reverb_shared) = Reverb::shared(sr);
-        pipeline.add(Box::new(reverb_proc));
+        chain.add("reverb", Box::new(reverb_proc));
         let (distortion_proc, distortion_shared) = Distortion::shared(sr);
-        pipeline.add(Box::new(distortion_proc));
+        chain.add("distortion", Box::new(distortion_proc));
         let (modulation_proc, modulation_shared) = Modulation::shared(sr);
-        pipeline.add(Box::new(modulation_proc));
+        chain.add("modulation", Box::new(modulation_proc));
         let (eq_proc, eq_shared) = ParametricEq::shared(sr);
-        pipeline.add(Box::new(eq_proc));
+        chain.add("eq", Box::new(eq_proc));
         let (pitch_proc, pitch_shared) = PitchShifter::shared(sr);
-        pipeline.add(Box::new(pitch_proc));
+        chain.add("pitch", Box::new(pitch_proc));
         let (vocal_proc, vocal_shared) = Vocal::shared(sr);
-        pipeline.add(Box::new(vocal_proc));
+        chain.add("vocal", Box::new(vocal_proc));
         let meter = Arc::new(LevelMeterProcessor::new());
         let (analyzer, spectrum_handle) = SpectrumAnalyzer::shared(1024);
         let analyzer = Arc::new(Mutex::new(analyzer));
@@ -77,7 +79,7 @@ impl AudioEngine {
             host,
             input_stream: None,
             output_stream: None,
-            pipeline: Arc::new(Mutex::new(pipeline)),
+            chain: Arc::new(Mutex::new(chain)),
             meter,
             gain: gain_shared,
             delay: delay_shared,
@@ -132,7 +134,7 @@ impl AudioEngine {
         let ring = HeapRb::<f32>::new((sr as usize * ch as usize * 4) as usize);
         let (mut prod, mut cons) = ring.split();
 
-        let pipeline = self.pipeline.clone();
+        let chain = self.chain.clone();
         let meter = self.meter.clone();
         let analyzer = self.analyzer.clone();
         let recorder = self.recorder.clone();
@@ -140,7 +142,7 @@ impl AudioEngine {
             in_cfg.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
                 let mut buf = data.to_vec();
-                if let Ok(mut p) = pipeline.try_lock() { p.process(&mut buf); }
+                if let Ok(mut c) = chain.try_lock() { c.process(&mut buf); }
                 meter.process(&buf);
                 if let Ok(mut a) = analyzer.try_lock() { a.push(&buf); }
                 if let Ok(mut rec) = recorder.lock() { rec.push(&buf); }
@@ -351,6 +353,26 @@ impl AudioEngine {
 
     pub fn stop_playback(&mut self) {
         self.playback_stream = None;
+    }
+
+    pub fn effect_names(&self) -> Vec<String> {
+        self.chain.lock().map(|c| c.names()).unwrap_or_default()
+    }
+
+    pub fn effect_enabled(&self, name: &str) -> bool {
+        self.chain.lock().map(|c| c.enabled(name)).unwrap_or(false)
+    }
+
+    pub fn set_effect_enabled(&self, name: &str, enabled: bool) -> bool {
+        self.chain.lock().map(|mut c| c.set_enabled(name, enabled)).unwrap_or(false)
+    }
+
+    pub fn remove_effect(&self, name: &str) -> bool {
+        self.chain.lock().map(|mut c| c.remove(name)).unwrap_or(false)
+    }
+
+    pub fn move_effect(&self, name: &str, delta: i32) -> bool {
+        self.chain.lock().map(|mut c| c.move_by(name, delta as isize)).unwrap_or(false)
     }
 
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
