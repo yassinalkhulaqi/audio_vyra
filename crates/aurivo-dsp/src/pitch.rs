@@ -76,9 +76,12 @@ impl PitchShifter {
     pub fn reset(&mut self) {
         self.buffer.fill(0.0);
         self.write = 0;
+        let grain_size = self.grain;
+        let hop = self.hop;
+        let count = self.grains.len() as f32;
         for (i, grain) in self.grains.iter_mut().enumerate() {
-            grain.read = -(self.grain as f64) - (i as f64 * self.hop as f64);
-            grain.phase = i as f32 / self.grains.len() as f32;
+            grain.read = -(grain_size as f64) - (i as f64 * hop as f64);
+            grain.phase = i as f32 / count;
         }
     }
 
@@ -95,6 +98,7 @@ impl PitchShifter {
         let phase_step = 1.0 / self.hop as f32;
         let grain_len = self.grain as f64;
         let norm = 2.0 / self.grains.len() as f32;
+        let mask = self.mask;
 
         for sample in samples.iter_mut() {
             self.buffer[self.write] = *sample;
@@ -103,7 +107,8 @@ impl PitchShifter {
             let write_f = self.write as f64;
             for grain in self.grains.iter_mut() {
                 let window = 0.5 - 0.5 * (std::f32::consts::TAU * grain.phase).cos();
-                let idx = self.index_of(grain.read);
+                let base = grain.read.floor() as i64;
+                let idx = base.rem_euclid(mask as i64 + 1) as usize & mask;
                 acc += self.buffer[idx] * window;
 
                 grain.phase += phase_step;
