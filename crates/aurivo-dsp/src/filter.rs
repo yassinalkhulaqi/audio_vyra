@@ -1,4 +1,6 @@
 ﻿#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use crate::denormal::flush;
+
 pub enum BiquadType { LowPass, HighPass, Peak { gain_db: i32 } }
 
 #[derive(Debug, Clone)]
