@@ -4,115 +4,106 @@
 <meta charset="utf-8" />
 <title>AURIVO</title>
 <style>
-  body { font-family: system-ui, sans-serif; background:#0b0f14; color:#e6edf3; margin:0; padding:24px; }
-  h1 { margin:0 0 16px; }
-  .row { display:flex; gap:12px; align-items:center; margin:12px 0; }
-  select,button,input { padding:8px 12px; border-radius:8px; border:1px solid #30363d; background:#161b22; color:#e6edf3; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background:#0b0f14; color:#e6edf3; margin:0; padding:16px; display:grid; grid-template-columns:320px 1fr; gap:16px; align-items:start; }
+  h1 { grid-column:1 / -1; margin:0 0 4px; font-size:22px; letter-spacing:.08em; }
+  .sidebar { display:flex; flex-direction:column; gap:12px; position:sticky; top:16px; }
+  .panel { background:#11161d; border:1px solid #21262d; border-radius:10px; padding:12px; }
+  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#8b949e; margin:0 0 8px; }
+  .row { display:flex; gap:8px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+  select,button,input { padding:7px 10px; border-radius:7px; border:1px solid #30363d; background:#161b22; color:#e6edf3; }
   button { cursor:pointer; }
-  .meter { width:300px; height:12px; background:#21262d; border-radius:6px; overflow:hidden; }
+  button:hover { border-color:#58a6ff; }
+  .meter { width:100%; height:10px; background:#21262d; border-radius:5px; overflow:hidden; }
   .bar { height:100%; width:0%; background:#2ea043; }
-  .status { font-size:14px; color:#8b949e; }
-  canvas { width:100%; height:140px; background:#0d1117; border:1px solid #30363d; border-radius:8px; }
+  .status { font-size:12px; color:#8b949e; }
+  canvas { width:100%; height:120px; background:#0d1117; border:1px solid #30363d; border-radius:8px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:12px; }
+  details { background:#11161d; border:1px solid #21262d; border-radius:10px; padding:10px 12px; }
+  details[open] { border-color:#30363d; }
+  summary { cursor:pointer; font-weight:600; font-size:14px; }
+  .card-body { margin-top:6px; }
+  textarea { width:100%; font-family:monospace; background:#0d1117; color:#e6edf3; border:1px solid #30363d; border-radius:8px; }
+  @media (max-width:900px) { body { grid-template-columns:1fr; } .sidebar { position:static; } }
 </style>
 </head>
 <body>
-  <h1>AURIVO</h1>
-  <div class="status" id="status">Stopped</div>
-  <div class="row">
-    <label>Input</label>
-    <select id="input"></select>
-    <label>Output</label>
-    <select id="output"></select>
+<h1>AURIVO</h1>
+<aside class="sidebar">
+  <div class="panel">
+    <h2>Transport</h2>
+    <div class="status" id="status">Stopped</div>
+    <div class="row"><label>Input</label><select id="input"></select></div>
+    <div class="row"><label>Output</label><select id="output"></select></div>
+    <div class="row"><button id="start">Start</button><button id="stop">Stop</button></div>
+    <div class="row"><label>Gain dB</label><input id="gain" type="range" min="-24" max="24" step="0.5" value="0" /><span id="gainval">0</span></div>
+    <div class="row"><label>Level</label><div class="meter" style="flex:1;"><div class="bar" id="bar"></div></div><span id="lvl">0.000</span></div>
   </div>
-  <div class="row">
-    <button id="start">Start</button>
-    <button id="stop">Stop</button>
-    <label>Gain dB</label>
-    <input id="gain" type="range" min="-24" max="24" step="0.5" value="0" />
-    <span id="gainval">0</span>
+  <div class="panel">
+    <h2>Spectrum</h2>
+    <canvas id="spectrum" width="512" height="140"></canvas>
   </div>
-   <div class="row">
-     <label>Level</label>
-     <div class="meter"><div class="bar" id="bar"></div></div>
-     <span id="lvl">0.000</span>
-   </div>
-   <h2 style="font-size:16px;margin-top:24px;">Spectrum</h2>
-   <canvas id="spectrum" width="512" height="140"></canvas>
-   <h2 style="font-size:16px;margin-top:24px;">Output</h2>
-   <div class="row">
-     <label>Out gain</label>
-     <input id="out_gain" type="range" min="-24" max="24" step="0.5" value="0" />
-     <span id="out_gainv">0 dB</span>
-     <label><input id="out_mute" type="checkbox" /> Mute</label>
-   </div>
-   <h2 style="font-size:16px;margin-top:24px;">Effects (enable / bypass)</h2>
-   <div class="row" id="fx_toggles" style="flex-wrap:wrap;"></div>
-   <h2 style="font-size:16px;margin-top:24px;">Recorder</h2>
-   <div class="row">
-     <button id="rec_start">Record</button>
-     <button id="rec_stop">Stop</button>
-     <span id="rec_state">Idle</span>
-     <span id="rec_count">0 samples</span>
-   </div>
-   <div class="row">
-     <label>Save as</label>
-     <input id="rec_path" type="text" value="recording.wav" />
-     <button id="rec_save">Save WAV</button>
-   </div>
-   <div class="row">
-     <label>Play</label>
-     <input id="play_path" type="text" value="recording.wav" />
-     <button id="play_btn">Play</button>
-     <button id="play_stop">Stop playback</button>
-   </div>
-   <h2 style="font-size:16px;margin-top:24px;">Delay / Echo</h2>
-   <div class="row"><label>Time</label><input id="dl_time" type="range" min="20" max="1200" step="10" value="300" /><span id="dl_timev">300 ms</span></div>
-   <div class="row"><label>Feedback</label><input id="dl_fb" type="range" min="0" max="0.95" step="0.01" value="0.35" /><span id="dl_fbv">0.35</span></div>
-   <div class="row"><label>Mix</label><input id="dl_mix" type="range" min="0" max="1" step="0.01" value="0.3" /><span id="dl_mixv">0.30</span></div>
-   <div class="row"><label>Damp</label><input id="dl_damp" type="range" min="0" max="1" step="0.01" value="0.2" /><span id="dl_dampv">0.20</span></div>
-   <h2 style="font-size:16px;margin-top:24px;">Reverb</h2>
-   <div class="row"><label>Room</label><input id="rv_room" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="rv_roomv">0.60</span></div>
-   <div class="row"><label>Damp</label><input id="rv_damp" type="range" min="0" max="1" step="0.01" value="0.4" /><span id="rv_dampv">0.40</span></div>
-   <div class="row"><label>Wet</label><input id="rv_wet" type="range" min="0" max="1" step="0.01" value="0.25" /><span id="rv_wetv">0.25</span></div>
-   <div class="row"><label>Dry</label><input id="rv_dry" type="range" min="0" max="1" step="0.01" value="0.85" /><span id="rv_dryv">0.85</span></div>
-   <h2 style="font-size:16px;margin-top:24px;">Distortion</h2>
-   <div class="row"><label>Mode</label>
-     <select id="ds_mode"><option value="0">Soft (tanh)</option><option value="1">Hard clip</option><option value="2">Fuzz</option></select>
-   </div>
-   <div class="row"><label>Drive</label><input id="ds_drive" type="range" min="-12" max="48" step="1" value="12" /><span id="ds_drivev">12 dB</span></div>
-   <div class="row"><label>Tone</label><input id="ds_tone" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="ds_tonev">0.60</span></div>
-   <div class="row"><label>Mix</label><input id="ds_mix" type="range" min="0" max="1" step="0.01" value="0.5" /><span id="ds_mixv">0.50</span></div>
-   <div class="row"><label>Downsample</label><input id="ds_down" type="range" min="1" max="64" step="1" value="1" /><span id="ds_downv">1x</span></div>
-   <div class="row"><label>Bit depth</label><input id="ds_bits" type="range" min="1" max="24" step="1" value="8" /><span id="ds_bitsv">8</span></div>
-   <h2 style="font-size:16px;margin-top:24px;">Modulation</h2>
-   <div class="row"><label>Mode</label>
-     <select id="mo_mode"><option value="0">Chorus</option><option value="1">Flanger</option><option value="2">Phaser</option><option value="3">Vibrato</option></select>
-   </div>
-   <div class="row"><label>Rate</label><input id="mo_rate" type="range" min="0.1" max="12" step="0.1" value="1.5" /><span id="mo_ratev">1.5 Hz</span></div>
-   <div class="row"><label>Depth</label><input id="mo_depth" type="range" min="0" max="1" step="0.01" value="0.4" /><span id="mo_depthv">0.40</span></div>
-   <div class="row"><label>Feedback</label><input id="mo_fb" type="range" min="0" max="0.95" step="0.01" value="0.3" /><span id="mo_fbv">0.30</span></div>
-   <div class="row"><label>Mix</label><input id="mo_mix" type="range" min="0" max="1" step="0.01" value="0.5" /><span id="mo_mixv">0.50</span></div>
-   <h2 style="font-size:16px;margin-top:24px;">Parametric EQ</h2>
-   <div id="eq"></div>
-   <div class="row">
-     <label>Pitch</label>
-     <input id="pitch" type="range" min="-24" max="24" step="1" value="0" />
-     <span id="pitchval">0 st</span>
-   </div>
-   <h2 style="font-size:16px;margin-top:24px;">Presets</h2>
-   <div class="row"><label>Dir</label><input id="pr_dir" type="text" value="presets" /></div>
-   <div class="row"><label>Name</label><input id="pr_name" type="text" value="My Voice" /><button id="pr_save">Save</button></div>
-   <div class="row"><label>Saved</label><select id="pr_list"></select><button id="pr_load">Load</button><button id="pr_delete">Delete</button></div>
-   <div class="row"><label>Params</label><span id="pr_info" class="status">—</span></div>
-   <h2 style="font-size:16px;margin-top:24px;">Vocal FX</h2>
-   <div class="row"><label>Mode</label>
-     <select id="vo_mode"><option value="0">Ring mod</option><option value="1">Robot</option><option value="2">Vowel formant</option><option value="3">Tremolo</option></select>
-   </div>
-   <div class="row"><label>Carrier</label><input id="vo_car" type="range" min="1" max="800" step="1" value="40" /><span id="vo_carv">40 Hz</span></div>
-   <div class="row"><label>Vowel</label><input id="vo_vowel" type="range" min="0" max="4" step="0.01" value="0" /><span id="vo_vowelv">A</span></div>
-   <div class="row"><label>Depth</label><input id="vo_depth" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="vo_depthv">0.60</span></div>
-   <div class="row"><label>Mix</label><input id="vo_mix" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="vo_mixv">0.60</span></div>
-   <script>
+  <div class="panel">
+    <h2>Output</h2>
+    <div class="row"><label>Out gain</label><input id="out_gain" type="range" min="-24" max="24" step="0.5" value="0" /><span id="out_gainv">0 dB</span></div>
+    <div class="row"><label><input id="out_mute" type="checkbox" /> Mute</label></div>
+  </div>
+  <div class="panel">
+    <h2>Recorder</h2>
+    <div class="row"><button id="rec_start">Record</button><button id="rec_stop">Stop</button><span id="rec_state" class="status">Idle</span></div>
+    <div class="row"><span id="rec_count" class="status">0 samples</span></div>
+    <div class="row"><input id="rec_path" type="text" value="recording.wav" /><button id="rec_save">Save WAV</button></div>
+    <div class="row"><input id="play_path" type="text" value="recording.wav" /><button id="play_btn">Play</button><button id="play_stop">Stop</button></div>
+  </div>
+  <div class="panel">
+    <h2>Presets</h2>
+    <div class="row"><input id="pr_dir" type="text" value="presets" /></div>
+    <div class="row"><input id="pr_name" type="text" value="My Voice" /><button id="pr_save">Save</button></div>
+    <div class="row"><select id="pr_list"></select><button id="pr_load">Load</button><button id="pr_delete">Delete</button></div>
+    <div class="status" id="pr_info">—</div>
+  </div>
+</aside>
+<main class="cards">
+  <details open><summary>Parametric EQ</summary><div class="card-body"><div id="eq"></div></div></details>
+  <details><summary>Pitch</summary><div class="card-body">
+    <div class="row"><label>Pitch</label><input id="pitch" type="range" min="-24" max="24" step="1" value="0" /><span id="pitchval">0 st</span></div>
+  </div></details>
+  <details open><summary>Delay / Echo</summary><div class="card-body">
+    <div class="row"><label>Time</label><input id="dl_time" type="range" min="20" max="1200" step="10" value="300" /><span id="dl_timev">300 ms</span></div>
+    <div class="row"><label>Feedback</label><input id="dl_fb" type="range" min="0" max="0.95" step="0.01" value="0.35" /><span id="dl_fbv">0.35</span></div>
+    <div class="row"><label>Mix</label><input id="dl_mix" type="range" min="0" max="1" step="0.01" value="0.3" /><span id="dl_mixv">0.30</span></div>
+    <div class="row"><label>Damp</label><input id="dl_damp" type="range" min="0" max="1" step="0.01" value="0.2" /><span id="dl_dampv">0.20</span></div>
+  </div></details>
+  <details><summary>Reverb</summary><div class="card-body">
+    <div class="row"><label>Room</label><input id="rv_room" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="rv_roomv">0.60</span></div>
+    <div class="row"><label>Damp</label><input id="rv_damp" type="range" min="0" max="1" step="0.01" value="0.4" /><span id="rv_dampv">0.40</span></div>
+    <div class="row"><label>Wet</label><input id="rv_wet" type="range" min="0" max="1" step="0.01" value="0.25" /><span id="rv_wetv">0.25</span></div>
+    <div class="row"><label>Dry</label><input id="rv_dry" type="range" min="0" max="1" step="0.01" value="0.85" /><span id="rv_dryv">0.85</span></div>
+  </div></details>
+  <details><summary>Distortion</summary><div class="card-body">
+    <div class="row"><label>Mode</label><select id="ds_mode"><option value="0">Soft (tanh)</option><option value="1">Hard clip</option><option value="2">Fuzz</option></select></div>
+    <div class="row"><label>Drive</label><input id="ds_drive" type="range" min="-12" max="48" step="1" value="12" /><span id="ds_drivev">12 dB</span></div>
+    <div class="row"><label>Tone</label><input id="ds_tone" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="ds_tonev">0.60</span></div>
+    <div class="row"><label>Mix</label><input id="ds_mix" type="range" min="0" max="1" step="0.01" value="0.5" /><span id="ds_mixv">0.50</span></div>
+    <div class="row"><label>Downsample</label><input id="ds_down" type="range" min="1" max="64" step="1" value="1" /><span id="ds_downv">1x</span></div>
+    <div class="row"><label>Bit depth</label><input id="ds_bits" type="range" min="1" max="24" step="1" value="8" /><span id="ds_bitsv">8</span></div>
+  </div></details>
+  <details><summary>Modulation</summary><div class="card-body">
+    <div class="row"><label>Mode</label><select id="mo_mode"><option value="0">Chorus</option><option value="1">Flanger</option><option value="2">Phaser</option><option value="3">Vibrato</option></select></div>
+    <div class="row"><label>Rate</label><input id="mo_rate" type="range" min="0.1" max="12" step="0.1" value="1.5" /><span id="mo_ratev">1.5 Hz</span></div>
+    <div class="row"><label>Depth</label><input id="mo_depth" type="range" min="0" max="1" step="0.01" value="0.4" /><span id="mo_depthv">0.40</span></div>
+    <div class="row"><label>Feedback</label><input id="mo_fb" type="range" min="0" max="0.95" step="0.01" value="0.3" /><span id="mo_fbv">0.30</span></div>
+    <div class="row"><label>Mix</label><input id="mo_mix" type="range" min="0" max="1" step="0.01" value="0.5" /><span id="mo_mixv">0.50</span></div>
+  </div></details>
+  <details open><summary>Vocal FX</summary><div class="card-body">
+    <div class="row"><label>Mode</label><select id="vo_mode"><option value="0">Ring mod</option><option value="1">Robot</option><option value="2">Vowel formant</option><option value="3">Tremolo</option></select></div>
+    <div class="row"><label>Carrier</label><input id="vo_car" type="range" min="1" max="800" step="1" value="40" /><span id="vo_carv">40 Hz</span></div>
+    <div class="row"><label>Vowel</label><input id="vo_vowel" type="range" min="0" max="4" step="0.01" value="0" /><span id="vo_vowelv">A</span></div>
+    <div class="row"><label>Depth</label><input id="vo_depth" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="vo_depthv">0.60</span></div>
+    <div class="row"><label>Mix</label><input id="vo_mix" type="range" min="0" max="1" step="0.01" value="0.6" /><span id="vo_mixv">0.60</span></div>
+  </div></details>
+</main>
+<script>
     const invoke = window.__TAURI__.core.invoke;
     async function refreshDevices() {
       const ins = await invoke('list_input_devices');
@@ -424,22 +415,6 @@
       catch(e) { alert('Delete failed: ' + e); }
     };
     refreshPresets();
-    (async () => {
-      try {
-        const names = await invoke('list_effects');
-        const box = document.getElementById('fx_toggles');
-        for (const n of names) {
-          const label = document.createElement('label');
-          label.style.marginRight = '14px';
-          const cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.checked = await invoke('effect_enabled', { name: n });
-          cb.onchange = async () => { await invoke('set_effect_enabled', { name: n, enabled: cb.checked }); };
-          label.append(cb, document.createTextNode(' ' + n));
-          box.appendChild(label);
-        }
-      } catch(e) {}
-    })();
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
     function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }

@@ -1,4 +1,6 @@
-﻿#[derive(Debug, Clone)]
+﻿use crate::denormal::flush;
+
+#[derive(Debug, Clone)]
 pub struct Compressor {
     pub threshold_db: f32,
     pub ratio: f32,
@@ -24,7 +26,7 @@ impl Compressor {
         for s in samples.iter_mut() {
             let level = s.abs();
             let coeff = if level > self.envelope { attack } else { release };
-            self.envelope = coeff * self.envelope + (1.0 - coeff) * level;
+            self.envelope = flush(coeff * self.envelope + (1.0 - coeff) * level);
             if self.envelope > thr {
                 let gain = thr * (self.envelope / thr).powf(1.0 / self.ratio) / self.envelope;
                 *s *= gain * makeup;

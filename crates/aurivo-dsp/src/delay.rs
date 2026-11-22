@@ -3,6 +3,7 @@
 //! can be changed at control rate without reallocating in the audio thread.
 
 use std::sync::{Arc, Mutex};
+use crate::denormal::flush;
 
 #[derive(Debug, Clone)]
 pub struct DelayParams {
@@ -94,7 +95,7 @@ impl Delay {
             let read = (self.write + len - delay_samples) % len;
             let delayed = self.buffer[read];
 
-            self.filtered = damp * self.filtered + (1.0 - damp) * delayed;
+            self.filtered = flush(damp * self.filtered + (1.0 - damp) * delayed);
             self.buffer[self.write] = input + feedback * self.filtered;
             self.write = (self.write + 1) % len;
 

@@ -1,4 +1,6 @@
-﻿#[derive(Debug, Clone)]
+﻿use crate::denormal::flush;
+
+#[derive(Debug, Clone)]
 pub struct NoiseGate {
     pub threshold_db: f32,
     pub attack_ms: f32,
@@ -21,7 +23,7 @@ impl NoiseGate {
         for s in samples.iter_mut() {
             let level = s.abs();
             let coeff = if level > self.envelope { attack } else { release };
-            self.envelope = coeff * self.envelope + (1.0 - coeff) * level;
+            self.envelope = flush(coeff * self.envelope + (1.0 - coeff) * level);
             if self.envelope < thr { *s = 0.0; }
         }
     }
