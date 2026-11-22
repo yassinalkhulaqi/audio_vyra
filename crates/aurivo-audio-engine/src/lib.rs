@@ -1,10 +1,12 @@
 pub mod chain;
+pub mod channels;
 pub mod recorder;
 pub mod resampler;
 pub mod state;
 
 use aurivo_core::{AurivoError, Result, LevelMeter};
 use chain::EffectChain;
+use channels::{downmix, expand};
 use recorder::{RecorderState, read_wav, write_wav};
 use resampler::LinearResampler;
 use aurivo_dsp::{AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, SpectrumAnalyzer, Vocal, VocalParams};
@@ -153,12 +155,14 @@ impl AudioEngine {
         let in_stream = input_dev.build_input_stream(
             in_cfg.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let mut buf = data.to_vec();
+                let mut buf = downmix(data, ch);
                 if let Ok(mut c) = chain.try_lock() { c.process(&mut buf); }
                 meter.process(&buf);
                 if let Ok(mut a) = analyzer.try_lock() { a.push(&buf); }
                 if let Ok(mut rec) = recorder.lock() { rec.push(&buf); }
-                let _ = prod.push_slice(&buf);
+                let mut expanded = vec![0.0f32; buf.len() * ch as usize];
+                expand(&buf, ch, &mut expanded);
+                let _ = prod.push_slice(&expanded);
             },
             |err| eprintln!("input stream error: {err}"),
             None,
@@ -199,7 +203,7 @@ impl AudioEngine {
         self.channels = ch;
         if let Ok(mut rec) = self.recorder.lock() {
             rec.sample_rate = sr;
-            rec.channels = ch;
+            rec.channels = 1;
         }
         Ok(())
     }
