@@ -1,6 +1,7 @@
 pub mod audio_path;
 pub mod chain;
 pub mod channels;
+pub mod control;
 pub mod latency;
 pub mod recorder;
 pub mod resampler;
@@ -15,6 +16,7 @@ use recorder::{RecorderState, read_wav, write_wav};
 use resampler::LinearResampler;
 use rt_stats::{RtSnapshot, RtStats};
 use latency::LatencyTracker;
+use control::{ControlBinding, ControlMap, ControlMessage};
 use aurivo_dsp::{Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, PeakLimiter, SpectrumAnalyzer, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -60,6 +62,7 @@ pub struct AudioEngine {
     buffered_samples: Arc<AtomicU32>,
     automation: Arc<Mutex<AutomationBank>>,
     automation_base: Arc<Mutex<BTreeMap<String, f32>>>,
+    control_map: Arc<Mutex<ControlMap>>,
     playback_stream: Option<cpal::Stream>,
     vocal: Arc<Mutex<VocalParams>>,
     running: bool,
@@ -129,6 +132,7 @@ impl AudioEngine {
             buffered_samples: Arc::new(AtomicU32::new(0)),
             automation: Arc::new(Mutex::new(AutomationBank::new())),
             automation_base: Arc::new(Mutex::new(BTreeMap::new())),
+            control_map: Arc::new(Mutex::new(ControlMap::new())),
             playback_stream: None,
             vocal: vocal_shared,
             running: false,
@@ -653,6 +657,47 @@ impl AudioEngine {
                 _ => {}
             }
         }
+    }
+
+    pub fn control_bindings(&self) -> Vec<ControlBinding> {
+        self.control_map.lock().map(|m| m.bindings().to_vec()).unwrap_or_default()
+    }
+
+    pub fn bind_control(&self, channel: u8, controller: u8, target: &str, min: f32, max: f32) -> bool {
+        match target {
+            "gain_db" | "output_gain_db" | "pitch" => {}
+            _ => return false,
+        }
+        if let Ok(mut map) = self.control_map.lock() {
+            map.add(ControlBinding::new(channel, controller, target, min, max))
+        } else {
+            false
+        }
+    }
+
+    pub fn unbind_control(&self, channel: u8, controller: u8) -> bool {
+        self.control_map.lock().map(|mut m| m.remove_exact(channel, controller)).unwrap_or(false)
+    }
+
+    pub fn clear_controls(&self) {
+        if let Ok(mut map) = self.control_map.lock() { map.clear(); }
+    }
+
+    pub fn send_control(&self, channel: u8, controller: u8, value: f32) -> usize {
+        let message = ControlMessage::new(channel, controller, value);
+        let applied = match self.control_map.lock() {
+            Ok(map) => map.apply(&message),
+            Err(_) => return 0,
+        };
+        for (target, value) in &applied {
+            match target.as_str() {
+                "gain_db" => self.set_input_gain_db(*value),
+                "output_gain_db" => self.set_output_gain_db(*value),
+                "pitch" => self.set_pitch_semitones(*value),
+                _ => {}
+            }
+        }
+        applied.len()
     }
 
     pub fn tick_automation(&self, seconds: f32) {

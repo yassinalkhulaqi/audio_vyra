@@ -626,6 +626,46 @@ function boot() {
       lastAutomationTick = now;
       await invoke('tick_automation', { seconds });
     }, 100);
+    async function refreshBindings() {
+      const bindings = await invoke('control_bindings');
+      const box = document.getElementById('ctl_list');
+      box.textContent = '';
+      if (!bindings.length) { box.textContent = 'No bindings'; return; }
+      for (const b of bindings) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const label = document.createElement('span');
+        label.textContent = 'ch' + b.channel + ' cc' + b.controller + ' -> ' + b.target;
+        const remove = document.createElement('button');
+        remove.textContent = '\u00d7';
+        remove.onclick = async () => { await invoke('unbind_control', { channel: b.channel, controller: b.controller }); refreshBindings(); };
+        row.append(label, remove);
+        box.appendChild(row);
+      }
+    }
+    document.getElementById('ctl_bind').onclick = async () => {
+      const channel = parseInt(document.getElementById('ctl_ch').value);
+      const controller = parseInt(document.getElementById('ctl_cc').value);
+      const target = document.getElementById('ctl_target').value;
+      const ranges = { gain_db: [-24, 24], output_gain_db: [-24, 24], pitch: [-24, 24] };
+      const [min, max] = ranges[target];
+      await invoke('bind_control', { channel, controller, target, min, max });
+      await refreshBindings();
+      toast('Control bound', 'ok');
+    };
+    document.getElementById('ctl_clear').onclick = async () => {
+      await invoke('clear_controls');
+      await refreshBindings();
+    };
+    document.getElementById('ctl_send').onclick = async () => {
+      const channel = parseInt(document.getElementById('ctl_ch').value);
+      const controller = parseInt(document.getElementById('ctl_cc').value);
+      const value = parseFloat(document.getElementById('ctl_value').value);
+      const n = await invoke('send_control', { channel, controller, value });
+      toast(n ? 'Control applied' : 'No binding for this CC', n ? 'ok' : 'error');
+      await syncAll();
+    };
+    refreshBindings();
     refreshAutomation();
     refreshDevices();
     loadEq();

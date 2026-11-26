@@ -78,6 +78,13 @@
     <div class="row"><button id="auto_add">Add route</button><button id="auto_clear">Clear all</button></div>
     <div id="auto_list" class="status">No routes</div>
   </div>
+  <div class="panel">
+    <h2>Controllers</h2>
+    <div class="row"><label>Ch</label><input id="ctl_ch" type="number" min="0" max="15" value="0" style="width:60px;" /><label>CC</label><input id="ctl_cc" type="number" min="0" max="127" value="7" style="width:70px;" /><select id="ctl_target"><option value="gain_db">Input gain</option><option value="output_gain_db">Output gain</option><option value="pitch">Pitch</option></select></div>
+    <div class="row"><label>Value</label><input id="ctl_value" type="range" min="0" max="1" step="0.01" value="0.5" /><button id="ctl_send">Send</button></div>
+    <div class="row"><button id="ctl_bind">Bind</button><button id="ctl_clear">Clear all</button></div>
+    <div id="ctl_list" class="status">No bindings</div>
+  </div>
 </aside>
 <main class="cards">
   <details open><summary>Parametric EQ</summary><div class="card-body"><div id="eq"></div></div></details>

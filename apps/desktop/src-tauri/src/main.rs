@@ -318,6 +318,26 @@ fn reset_rt_stats(state: State<'_, Mutex<AudioEngine>>) {
     state.lock().unwrap().reset_rt_stats()
 }
 #[tauri::command]
+fn control_bindings(state: State<'_, Mutex<AudioEngine>>) -> Vec<aurivo_audio_engine::control::ControlBinding> {
+    state.lock().unwrap().control_bindings()
+}
+#[tauri::command]
+fn bind_control(state: State<'_, Mutex<AudioEngine>>, channel: u8, controller: u8, target: String, min: f32, max: f32) -> bool {
+    state.lock().unwrap().bind_control(channel, controller, &target, min, max)
+}
+#[tauri::command]
+fn unbind_control(state: State<'_, Mutex<AudioEngine>>, channel: u8, controller: u8) -> bool {
+    state.lock().unwrap().unbind_control(channel, controller)
+}
+#[tauri::command]
+fn clear_controls(state: State<'_, Mutex<AudioEngine>>) {
+    state.lock().unwrap().clear_controls()
+}
+#[tauri::command]
+fn send_control(state: State<'_, Mutex<AudioEngine>>, channel: u8, controller: u8, value: f32) -> usize {
+    state.lock().unwrap().send_control(channel, controller, value)
+}
+#[tauri::command]
 fn automation_routes(state: State<'_, Mutex<AudioEngine>>) -> Vec<(String, i32, f32, f32, bool)> {
     state.lock().unwrap().automation_routes()
 }
@@ -377,6 +397,7 @@ fn main() {
             list_presets, save_preset, load_preset, delete_preset, install_factory_presets, export_presets, import_presets, export_presets_to_file, import_presets_from_file, apply_preset, get_state, set_state, load_config, save_config, stream_info,
             audio_stats, reset_audio_stats, reset_clip, rt_stats, reset_rt_stats, buffered_ms, default_paths,
             automation_routes, add_automation, remove_automation, clear_automation, tick_automation,
+            control_bindings, bind_control, unbind_control, clear_controls, send_control,
             list_effects, set_effect_enabled, effect_enabled, remove_effect, move_effect, reorder_effects, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
