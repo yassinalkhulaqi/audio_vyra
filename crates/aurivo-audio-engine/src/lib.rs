@@ -1,6 +1,7 @@
 pub mod audio_path;
 pub mod chain;
 pub mod channels;
+pub mod latency;
 pub mod recorder;
 pub mod resampler;
 pub mod rt_stats;
@@ -13,6 +14,7 @@ use channels::downmix_into;
 use recorder::{RecorderState, read_wav, write_wav};
 use resampler::LinearResampler;
 use rt_stats::{RtSnapshot, RtStats};
+use latency::LatencyTracker;
 use aurivo_dsp::{Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, PeakLimiter, SpectrumAnalyzer, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -52,6 +54,8 @@ pub struct AudioEngine {
     underruns: Arc<AtomicU64>,
     resampler: Arc<Mutex<LinearResampler>>,
     rt_stats: Arc<RtStats>,
+    latency: Arc<LatencyTracker>,
+    buffered_samples: Arc<AtomicU32>,
     playback_stream: Option<cpal::Stream>,
     vocal: Arc<Mutex<VocalParams>>,
     running: bool,
@@ -117,6 +121,8 @@ impl AudioEngine {
             underruns,
             resampler,
             rt_stats: RtStats::new(),
+            latency: LatencyTracker::new(),
+            buffered_samples: Arc::new(AtomicU32::new(0)),
             playback_stream: None,
             vocal: vocal_shared,
             running: false,
@@ -171,6 +177,7 @@ impl AudioEngine {
         let analyzer = self.analyzer.clone();
         let recorder = self.recorder.clone();
         let rt_stats = self.rt_stats.clone();
+        let buffered_samples = self.buffered_samples.clone();
         let mut mono_scratch = vec![0.0f32; 256];
         let in_stream = input_dev.build_input_stream(
             in_cfg.into(),
@@ -196,6 +203,7 @@ impl AudioEngine {
                     Err(_) => rt_stats.bump_recorder(),
                 }
                 let pushed = prod.push_slice(buf);
+                buffered_samples.fetch_add(pushed as u32, Ordering::Relaxed);
                 if pushed < buf.len() {
                     overruns.fetch_add((buf.len() - pushed) as u64, Ordering::Relaxed);
                 }
@@ -208,6 +216,8 @@ impl AudioEngine {
         let output_muted = self.output_muted.clone();
         let resampler = self.resampler.clone();
         let rt_stats = self.rt_stats.clone();
+        let latency = self.latency.clone();
+        let buffered_samples = self.buffered_samples.clone();
         let mut mono_in = vec![0.0f32; 512];
         let mut resampled = vec![0.0f32; 1024];
         let out_stream = output_dev.build_output_stream(
@@ -221,6 +231,10 @@ impl AudioEngine {
                     resampled.resize(frames + 8, 0.0);
                 }
                 let got = cons.pop_slice(&mut mono_in[..frames]);
+                let _ = buffered_samples.try_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                    Some(v.saturating_sub(got as u32))
+                });
+                latency.report(buffered_samples.load(Ordering::Relaxed) as usize, out_sr);
                 let written = match resampler.try_lock() {
                     Ok(mut r) => prepare_output_frames(
                         &mono_in[..got],
@@ -293,6 +307,18 @@ impl AudioEngine {
 
     pub fn reset_rt_stats(&self) {
         self.rt_stats.reset();
+    }
+
+    pub fn buffered_ms(&self) -> u32 {
+        self.latency.buffered_ms()
+    }
+
+    pub fn peak_buffered_ms(&self) -> u32 {
+        self.latency.peak_ms()
+    }
+
+    pub fn reset_latency(&self) {
+        self.latency.reset();
     }
     pub fn stream_info(&self) -> (u32, u32, u16) {
         (self.sample_rate, self.output_sample_rate, self.channels)

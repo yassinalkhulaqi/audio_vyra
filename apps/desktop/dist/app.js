@@ -49,6 +49,9 @@ function boot() {
         const rms = l.rms || 0;
         document.getElementById('bar').style.width = Math.min(100, rms*200) + '%';
         document.getElementById('lvl').textContent = rms.toFixed(3);
+        document.getElementById('peak').textContent = (l.peak || 0).toFixed(3);
+        const latency = await invoke('buffered_ms');
+        document.getElementById('latency').textContent = latency + ' ms buffered';
         rmsHistory.push(rms); rmsHistory.shift(); drawRms();
         document.getElementById('bar').style.background = l.clipped ? '#d29922' : '#2ea043';
         document.getElementById('clip').style.color = l.clipped ? '#f85149' : '#8b949e';
@@ -400,6 +403,28 @@ function boot() {
         for (const n of names) {
           const row = document.createElement('div');
           row.className = 'row';
+          row.draggable = true;
+          row.dataset.effect = n;
+          row.ondragstart = (e) => {
+            e.dataTransfer.setData('text/plain', n);
+            e.dataTransfer.effectAllowed = 'move';
+            row.classList.add('dragging');
+          };
+          row.ondragend = () => row.classList.remove('dragging');
+          row.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+          row.ondrop = async (e) => {
+            e.preventDefault();
+            const source = e.dataTransfer.getData('text/plain');
+            if (!source || source === n) return;
+            const rows = [...box.querySelectorAll('[data-effect]')];
+            const order = rows.map((r) => r.dataset.effect);
+            const from = order.indexOf(source);
+            const to = order.indexOf(n);
+            if (from < 0 || to < 0) return;
+            order.splice(to, 0, order.splice(from, 1)[0]);
+            await invoke('reorder_effects', { names: order });
+            await loadChain();
+          };
           const cb = document.createElement('input');
           cb.type = 'checkbox';
           cb.checked = await invoke('effect_enabled', { name: n });

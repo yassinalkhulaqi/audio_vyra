@@ -28,3 +28,7 @@
   .toast.ok { border-color:#2ea043; }
   :focus-visible { outline:2px solid #58a6ff; outline-offset:2px; }
   @media (prefers-reduced-motion: reduce) { .toast { transition:none; } }
+
+  #fx_chain .row { cursor:grab; border:1px solid transparent; border-radius:6px; }
+  #fx_chain .row:hover { border-color:#30363d; }
+  #fx_chain .row.dragging { opacity:.45; }
