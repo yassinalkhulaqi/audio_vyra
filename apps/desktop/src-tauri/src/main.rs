@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
+mod paths;
 mod presets;
 
 use aurivo_audio_engine::{AppState, AudioEngine, EqBandInfo};
@@ -12,11 +13,27 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
-fn config_path(app: &AppHandle) -> PathBuf {
+fn app_root(app: &AppHandle) -> PathBuf {
     app.path()
         .app_config_dir()
-        .map(|p| p.join("config.json"))
-        .unwrap_or_else(|_| PathBuf::from("aurivo-config.json"))
+        .unwrap_or_else(|_| PathBuf::from("."))
+}
+
+fn config_path(app: &AppHandle) -> PathBuf {
+    app_root(app).join("config.json")
+}
+
+fn user_path(app: &AppHandle, input: &str) -> Result<PathBuf, String> {
+    paths::resolve_under(&app_root(app), input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn default_paths(_app: AppHandle) -> (String, String, String) {
+    (
+        "config.json".into(),
+        "presets".into(),
+        "recording.wav".into(),
+    )
 }
 
 fn preset_to_state(p: &Preset) -> AppState {
@@ -178,12 +195,14 @@ fn recorded_samples(state: State<'_, Mutex<AudioEngine>>) -> usize {
     state.lock().unwrap().recorded_samples()
 }
 #[tauri::command]
-fn save_recording(state: State<'_, Mutex<AudioEngine>>, path: String) -> Result<(), String> {
-    state.lock().unwrap().save_recording(&path).map_err(|e| e.to_string())
+fn save_recording(app: AppHandle, state: State<'_, Mutex<AudioEngine>>, path: String) -> Result<(), String> {
+    let path = user_path(&app, &path)?;
+    state.lock().unwrap().save_recording(&path.to_string_lossy()).map_err(|e| e.to_string())
 }
 #[tauri::command]
-fn play_wav(state: State<'_, Mutex<AudioEngine>>, path: String) -> Result<(), String> {
-    state.lock().unwrap().play_wav(&path).map_err(|e| e.to_string())
+fn play_wav(app: AppHandle, state: State<'_, Mutex<AudioEngine>>, path: String) -> Result<(), String> {
+    let path = user_path(&app, &path)?;
+    state.lock().unwrap().play_wav(&path.to_string_lossy()).map_err(|e| e.to_string())
 }
 #[tauri::command]
 fn stop_playback(state: State<'_, Mutex<AudioEngine>>) {
@@ -336,7 +355,7 @@ fn main() {
             spectrum, set_output_gain, get_output_gain, set_output_muted, is_output_muted,
             start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback,
             list_presets, save_preset, load_preset, delete_preset, install_factory_presets, export_presets, import_presets, export_presets_to_file, import_presets_from_file, apply_preset, get_state, set_state, load_config, save_config, stream_info,
-            audio_stats, reset_audio_stats, reset_clip, rt_stats, reset_rt_stats, buffered_ms,
+            audio_stats, reset_audio_stats, reset_clip, rt_stats, reset_rt_stats, buffered_ms, default_paths,
             list_effects, set_effect_enabled, effect_enabled, remove_effect, move_effect, reorder_effects, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())

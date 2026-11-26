@@ -39,7 +39,16 @@ pub fn save<P: AsRef<Path>>(path: P, cfg: &Config) -> io::Result<()> {
     }
     let text = serde_json::to_string_pretty(cfg)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-    fs::write(path, text)
+    let final_path = path.as_ref();
+    let temp_path = final_path.with_extension("json.tmp");
+    fs::write(&temp_path, &text)?;
+    match fs::rename(&temp_path, final_path) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            let _ = fs::remove_file(&temp_path);
+            Err(err)
+        }
+    }
 }
 
 #[cfg(test)]
