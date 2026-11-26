@@ -582,6 +582,51 @@ function boot() {
         toast('Output ' + (box.checked ? 'muted' : 'unmuted'), 'ok');
       }
     });
+    async function refreshAutomation() {
+      const routes = await invoke('automation_routes');
+      const box = document.getElementById('auto_list');
+      if (!routes.length) { box.textContent = 'No routes'; return; }
+      box.textContent = '';
+      for (const [target, shape, rate, depth, enabled] of routes) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const label = document.createElement('span');
+        label.textContent = target + ' · ' + rate.toFixed(2) + ' Hz · ±' + depth.toFixed(1) + (enabled ? '' : ' (off)');
+        const remove = document.createElement('button');
+        remove.textContent = '\u00d7';
+        remove.onclick = async () => { await invoke('remove_automation', { target }); refreshAutomation(); };
+        row.append(label, remove);
+        box.appendChild(row);
+      }
+    }
+    document.getElementById('auto_rate').oninput = (e) => {
+      document.getElementById('auto_ratev').textContent = parseFloat(e.target.value).toFixed(2) + ' Hz';
+    };
+    document.getElementById('auto_depth').oninput = (e) => {
+      document.getElementById('auto_depthv').textContent = parseFloat(e.target.value).toFixed(1);
+    };
+    document.getElementById('auto_add').onclick = async () => {
+      const target = document.getElementById('auto_target').value;
+      const shape = parseInt(document.getElementById('auto_shape').value);
+      const rate = parseFloat(document.getElementById('auto_rate').value);
+      const depth = parseFloat(document.getElementById('auto_depth').value);
+      await invoke('add_automation', { target, shape, rate, depth });
+      await refreshAutomation();
+      toast('Automation route added', 'ok');
+    };
+    document.getElementById('auto_clear').onclick = async () => {
+      await invoke('clear_automation');
+      await refreshAutomation();
+      await syncAll();
+    };
+    let lastAutomationTick = performance.now();
+    setInterval(async () => {
+      const now = performance.now();
+      const seconds = Math.min(0.25, (now - lastAutomationTick) / 1000);
+      lastAutomationTick = now;
+      await invoke('tick_automation', { seconds });
+    }, 100);
+    refreshAutomation();
     refreshDevices();
     loadEq();
   }

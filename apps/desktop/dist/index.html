@@ -70,6 +70,14 @@
     <div class="row"><input id="pr_bundle" type="text" value="presets.json" /><button id="pr_export">Export</button><button id="pr_import">Import</button></div>
     <div class="status" id="pr_info">—</div>
   </div>
+  <div class="panel">
+    <h2>Automation</h2>
+    <div class="row"><select id="auto_target"><option value="gain_db">Input gain</option><option value="output_gain_db">Output gain</option><option value="pitch">Pitch</option></select><select id="auto_shape"><option value="0">Sine</option><option value="1">Triangle</option><option value="2">Square</option><option value="3">Saw</option></select></div>
+    <div class="row"><label>Rate</label><input id="auto_rate" type="range" min="0.05" max="10" step="0.05" value="1" /><span id="auto_ratev">1.00 Hz</span></div>
+    <div class="row"><label>Depth</label><input id="auto_depth" type="range" min="0" max="24" step="0.5" value="3" /><span id="auto_depthv">3.0</span></div>
+    <div class="row"><button id="auto_add">Add route</button><button id="auto_clear">Clear all</button></div>
+    <div id="auto_list" class="status">No routes</div>
+  </div>
 </aside>
 <main class="cards">
   <details open><summary>Parametric EQ</summary><div class="card-body"><div id="eq"></div></div></details>

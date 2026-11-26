@@ -318,6 +318,26 @@ fn reset_rt_stats(state: State<'_, Mutex<AudioEngine>>) {
     state.lock().unwrap().reset_rt_stats()
 }
 #[tauri::command]
+fn automation_routes(state: State<'_, Mutex<AudioEngine>>) -> Vec<(String, i32, f32, f32, bool)> {
+    state.lock().unwrap().automation_routes()
+}
+#[tauri::command]
+fn add_automation(state: State<'_, Mutex<AudioEngine>>, target: String, shape: i32, rate: f32, depth: f32) -> bool {
+    state.lock().unwrap().add_automation(&target, shape, rate, depth)
+}
+#[tauri::command]
+fn remove_automation(state: State<'_, Mutex<AudioEngine>>, target: String) -> bool {
+    state.lock().unwrap().remove_automation(&target)
+}
+#[tauri::command]
+fn clear_automation(state: State<'_, Mutex<AudioEngine>>) {
+    state.lock().unwrap().clear_automation()
+}
+#[tauri::command]
+fn tick_automation(state: State<'_, Mutex<AudioEngine>>, seconds: f32) {
+    state.lock().unwrap().tick_automation(seconds)
+}
+#[tauri::command]
 fn buffered_ms(state: State<'_, Mutex<AudioEngine>>) -> u32 {
     state.lock().unwrap().buffered_ms()
 }
@@ -356,6 +376,7 @@ fn main() {
             start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback,
             list_presets, save_preset, load_preset, delete_preset, install_factory_presets, export_presets, import_presets, export_presets_to_file, import_presets_from_file, apply_preset, get_state, set_state, load_config, save_config, stream_info,
             audio_stats, reset_audio_stats, reset_clip, rt_stats, reset_rt_stats, buffered_ms, default_paths,
+            automation_routes, add_automation, remove_automation, clear_automation, tick_automation,
             list_effects, set_effect_enabled, effect_enabled, remove_effect, move_effect, reorder_effects, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())
