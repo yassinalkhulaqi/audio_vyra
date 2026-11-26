@@ -42,7 +42,7 @@ struct Bandpass {
 
 impl Bandpass {
     fn new(freq: f32, q: f32, sample_rate: f32) -> Self {
-        let freq = freq.clamp(20.0, sample_rate * 0.5 - 20.0);
+        let freq = crate::validate::safe_frequency(freq, sample_rate).max(20.0);
         let w0 = 2.0 * std::f32::consts::PI * freq / sample_rate;
         let alpha = w0.sin() / (2.0 * q.clamp(0.1, 20.0));
         let a0 = 1.0 + alpha;
@@ -57,10 +57,18 @@ impl Bandpass {
         }
     }
 
+    /// Retune the filter without discarding its state. Replacing the whole
+    /// biquad at every block boundary produced audible clicks in formant mode;
+    /// a small coefficient glide keeps the filter continuous while it follows
+    /// a morphing vowel.
     fn update(&mut self, freq: f32, q: f32, sample_rate: f32) {
-        *self = Self::new(freq, q, sample_rate);
-        self.z1 = 0.0;
-        self.z2 = 0.0;
+        let next = Self::new(freq, q, sample_rate);
+        const GLIDE: f32 = 0.08;
+        self.b0 += (next.b0 - self.b0) * GLIDE;
+        self.b1 += (next.b1 - self.b1) * GLIDE;
+        self.b2 += (next.b2 - self.b2) * GLIDE;
+        self.a1 += (next.a1 - self.a1) * GLIDE;
+        self.a2 += (next.a2 - self.a2) * GLIDE;
     }
 
     fn process(&mut self, x: f32) -> f32 {

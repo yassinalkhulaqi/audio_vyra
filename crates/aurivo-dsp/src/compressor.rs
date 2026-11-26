@@ -1,4 +1,5 @@
 ﻿use crate::denormal::flush;
+use crate::validate::{envelope_coefficient, safe_db, safe_ratio};
 
 #[derive(Debug, Clone)]
 pub struct Compressor {
@@ -20,16 +21,17 @@ impl Compressor {
     pub fn is_bypassed(&self) -> bool { self.bypass }
     pub fn process(&mut self, samples: &mut [f32]) {
         if self.bypass { return; }
-        let thr = 10f32.powf(self.threshold_db / 20.0);
-        let makeup = 10f32.powf(self.makeup_db / 20.0);
-        let attack = if self.attack_ms > 0.0 { (-1.0 / (self.sample_rate * self.attack_ms / 1000.0)).exp() } else { 0.0 };
-        let release = if self.release_ms > 0.0 { (-1.0 / (self.sample_rate * self.release_ms / 1000.0)).exp() } else { 0.0 };
+        let thr = 10f32.powf(safe_db(self.threshold_db) / 20.0);
+        let makeup = 10f32.powf(safe_db(self.makeup_db) / 20.0);
+        let ratio = safe_ratio(self.ratio);
+        let attack = envelope_coefficient(self.sample_rate, self.attack_ms);
+        let release = envelope_coefficient(self.sample_rate, self.release_ms);
         for s in samples.iter_mut() {
             let level = s.abs();
             let coeff = if level > self.envelope { attack } else { release };
             self.envelope = flush(coeff * self.envelope + (1.0 - coeff) * level);
             if self.envelope > thr {
-                let gain = thr * (self.envelope / thr).powf(1.0 / self.ratio) / self.envelope;
+                let gain = thr * (self.envelope / thr).powf(1.0 / ratio) / self.envelope;
                 *s *= gain * makeup;
             } else {
                 *s *= makeup;

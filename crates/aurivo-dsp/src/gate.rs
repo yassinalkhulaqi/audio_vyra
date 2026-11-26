@@ -1,4 +1,5 @@
 ﻿use crate::denormal::flush;
+use crate::validate::{envelope_coefficient, safe_db};
 
 #[derive(Debug, Clone)]
 pub struct NoiseGate {
@@ -18,9 +19,9 @@ impl NoiseGate {
     pub fn is_bypassed(&self) -> bool { self.bypass }
     pub fn process(&mut self, samples: &mut [f32]) {
         if self.bypass { return; }
-        let thr = 10f32.powf(self.threshold_db / 20.0);
-        let attack = if self.attack_ms > 0.0 { (-1.0 / (self.sample_rate * self.attack_ms / 1000.0)).exp() } else { 0.0 };
-        let release = if self.release_ms > 0.0 { (-1.0 / (self.sample_rate * self.release_ms / 1000.0)).exp() } else { 0.0 };
+        let thr = 10f32.powf(safe_db(self.threshold_db) / 20.0);
+        let attack = envelope_coefficient(self.sample_rate, self.attack_ms);
+        let release = envelope_coefficient(self.sample_rate, self.release_ms);
         for s in samples.iter_mut() {
             let level = s.abs();
             let coeff = if level > self.envelope { attack } else { release };

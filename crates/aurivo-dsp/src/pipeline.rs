@@ -57,6 +57,7 @@ use crate::modulation::Modulation;
 use crate::eq::ParametricEq;
 use crate::pitch::PitchShifter;
 use crate::vocal::Vocal;
+use crate::limiter::PeakLimiter;
 
 impl AudioProcessor for Gain {
     fn name(&self) -> &'static str { "gain" }
@@ -127,4 +128,10 @@ impl AudioProcessor for Vocal {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Vocal::process(self, samples); }
     fn bypass(&self) -> bool { Vocal::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { Vocal::set_bypass(self, b); }
+}
+impl AudioProcessor for PeakLimiter {
+    fn name(&self) -> &'static str { "limiter" }
+    fn process(&mut self, samples: &mut [f32], _sr: u32) { PeakLimiter::process(self, samples); }
+    fn bypass(&self) -> bool { PeakLimiter::is_bypassed(self) }
+    fn set_bypass(&mut self, b: bool) { PeakLimiter::set_bypass(self, b); }
 }

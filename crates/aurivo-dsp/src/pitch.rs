@@ -102,9 +102,14 @@ impl PitchShifter {
             let write_f = self.write as f64;
             for grain in self.grains.iter_mut() {
                 let window = 0.5 - 0.5 * (std::f32::consts::TAU * grain.phase).cos();
-                let base = grain.read.floor() as i64;
-                let idx = base.rem_euclid(mask as i64 + 1) as usize & mask;
-                acc += self.buffer[idx] * window;
+                let base = grain.read.floor();
+                let frac = (grain.read - base) as f32;
+                let size = mask as i64 + 1;
+                let i0 = (base as i64).rem_euclid(size) as usize & mask;
+                let i1 = ((base as i64 + 1).rem_euclid(size)) as usize & mask;
+                let a = self.buffer[i0];
+                let b = self.buffer[i1];
+                acc += (a + (b - a) * frac) * window;
 
                 grain.phase += phase_step;
                 grain.read += ratio;

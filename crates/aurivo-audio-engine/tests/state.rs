@@ -3,7 +3,7 @@ use aurivo_audio_engine::{AppState, AudioEngine};
 #[test]
 fn state_captures_chain_and_bypass() {
     let engine = AudioEngine::new();
-    assert_eq!(engine.state().chain.len(), 11);
+    assert_eq!(engine.state().chain.len(), 12);
 
     assert!(engine.set_effect_enabled("delay", false));
     assert!(!engine.effect_enabled("delay"));
@@ -21,7 +21,7 @@ fn apply_state_restores_chain_bypass_and_eq_band_count() {
     let engine = AudioEngine::new();
     assert!(engine.set_effect_enabled("vocal", false));
     let reordered: Vec<String> = ["gain", "gate", "compressor", "highpass", "delay", "reverb",
-        "distortion", "modulation", "eq", "pitch", "vocal"]
+        "distortion", "modulation", "eq", "pitch", "vocal", "limiter"]
         .iter()
         .rev()
         .map(|s| s.to_string())

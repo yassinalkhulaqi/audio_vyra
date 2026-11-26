@@ -61,7 +61,7 @@ mod tests {
         assert_eq!(loaded.input_device.as_deref(), Some("mic"));
         assert_eq!(loaded.output_device.as_deref(), Some("speakers"));
         let state = loaded.state.expect("state should be saved");
-        assert_eq!(state.chain.len(), 11);
+        assert_eq!(state.chain.len(), 12);
         assert!(state.enabled.values().all(|v| *v));
         fs::remove_dir_all(dir).unwrap();
     }

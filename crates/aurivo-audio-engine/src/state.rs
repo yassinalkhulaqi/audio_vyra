@@ -25,7 +25,7 @@ impl Default for AppState {
     fn default() -> Self {
         let chain: Vec<String> = vec![
             "gain", "gate", "compressor", "highpass", "delay", "reverb",
-            "distortion", "modulation", "eq", "pitch", "vocal",
+            "distortion", "modulation", "eq", "pitch", "vocal", "limiter",
         ]
         .into_iter()
         .map(str::to_string)

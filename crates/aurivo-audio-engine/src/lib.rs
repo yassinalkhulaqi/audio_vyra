@@ -13,7 +13,7 @@ use channels::downmix_into;
 use recorder::{RecorderState, read_wav, write_wav};
 use resampler::LinearResampler;
 use rt_stats::{RtSnapshot, RtStats};
-use aurivo_dsp::{Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, SpectrumAnalyzer, Vocal, VocalParams};
+use aurivo_dsp::{Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, PeakLimiter, SpectrumAnalyzer, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
@@ -85,6 +85,7 @@ impl AudioEngine {
         chain.add("pitch", Box::new(pitch_proc));
         let (vocal_proc, vocal_shared) = Vocal::shared(sr);
         chain.add("vocal", Box::new(vocal_proc));
+        chain.add("limiter", Box::new(PeakLimiter::new(sr)));
         let meter = Arc::new(LevelMeterProcessor::new());
         let (analyzer, spectrum_handle) = SpectrumAnalyzer::shared(1024);
         let analyzer = Arc::new(Mutex::new(analyzer));
