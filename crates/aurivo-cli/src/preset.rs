@@ -26,7 +26,7 @@ pub fn inspect(path: &str) -> Result<String, String> {
         let mut entries: Vec<_> = params.iter().collect();
         entries.sort_by_key(|(k, _)| *k);
         let rows: Vec<Vec<String>> = entries.iter().map(|(k, v)| {
-            vec![k.to_string(), match v.as_f64() { Some(n) => format!("{n:.3}"), None => "non-numeric".into() }]
+            vec![k.to_string(), match v.as_f64() { Some(n) => crate::format::finite(n as f32), None => "non-numeric".into() }]
         }).collect();
         lines.push(table(&["Name", "Value"], &rows));
     }
