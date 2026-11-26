@@ -17,7 +17,7 @@ use resampler::LinearResampler;
 use rt_stats::{RtSnapshot, RtStats};
 use latency::LatencyTracker;
 use control::{ControlBinding, ControlMap, ControlMessage};
-use aurivo_dsp::{Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, PeakLimiter, SpectrumAnalyzer, Vocal, VocalParams};
+use aurivo_dsp::{SmoothedGain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, PeakLimiter, SpectrumAnalyzer, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
@@ -76,7 +76,7 @@ impl AudioEngine {
     pub fn new() -> Self {
         let host = cpal::default_host();
         let sr = 48000u32;
-        let (gain_proc, gain_shared) = Gain::shared();
+        let (gain_proc, gain_shared) = SmoothedGain::shared(sr);
         let mut chain = EffectChain::new(sr);
         chain.add("gain", Box::new(gain_proc));
         chain.add("gate", Box::new(NoiseGate::new(-40.0, 5.0, 50.0, sr as f32)));

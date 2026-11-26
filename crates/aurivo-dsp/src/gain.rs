@@ -16,6 +16,7 @@ impl Gain {
         (Self { gain_db: a.clone(), bypass: false }, a)
     }
     pub fn set_gain_db(&mut self, v: f32) { self.gain_db.store(v.to_bits(), Ordering::Relaxed); }
+    pub fn gain_db(&self) -> f32 { f32::from_bits(self.gain_db.load(Ordering::Relaxed)) }
     pub fn set_gain_db_shared(shared: &Arc<AtomicU32>, v: f32) { shared.store(v.to_bits(), Ordering::Relaxed); }
     pub fn set_bypass(&mut self, b: bool) { self.bypass = b; }
     pub fn is_bypassed(&self) -> bool { self.bypass }

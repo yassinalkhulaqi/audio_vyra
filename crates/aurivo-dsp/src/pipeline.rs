@@ -63,6 +63,7 @@ use crate::eq::ParametricEq;
 use crate::pitch::PitchShifter;
 use crate::vocal::Vocal;
 use crate::limiter::PeakLimiter;
+use crate::smoothing::SmoothedGain;
 
 impl AudioProcessor for Gain {
     fn name(&self) -> &'static str { "gain" }
@@ -133,6 +134,12 @@ impl AudioProcessor for Vocal {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Vocal::process(self, samples); }
     fn bypass(&self) -> bool { Vocal::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { Vocal::set_bypass(self, b); }
+}
+impl AudioProcessor for SmoothedGain {
+    fn name(&self) -> &'static str { "gain" }
+    fn process(&mut self, samples: &mut [f32], _sr: u32) { SmoothedGain::process(self, samples); }
+    fn bypass(&self) -> bool { SmoothedGain::is_bypassed(self) }
+    fn set_bypass(&mut self, b: bool) { SmoothedGain::set_bypass(self, b); }
 }
 impl AudioProcessor for PeakLimiter {
     fn name(&self) -> &'static str { "limiter" }

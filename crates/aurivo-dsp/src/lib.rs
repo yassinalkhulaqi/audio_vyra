@@ -15,6 +15,7 @@ pub mod modulation;
 pub mod eq;
 pub mod pitch;
 pub mod rt_param;
+pub mod smoothing;
 pub mod analysis;
 pub mod vocal;
 
@@ -24,6 +25,7 @@ pub use gate::NoiseGate;
 pub use automation::{AutomationBank, AutomationRoute, Lfo, LfoShape};
 pub use compressor::Compressor;
 pub use limiter::{LimiterParams, PeakLimiter};
+pub use smoothing::{Ramp, SmoothedGain, SmoothedValue};
 pub use filter::{Biquad, BiquadType};
 pub use pipeline::{ProcessingPipeline, AudioProcessor};
 pub use delay::{Delay, DelayParams};
