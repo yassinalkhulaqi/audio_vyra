@@ -46,7 +46,7 @@ impl SmoothedValue {
         self.target = value;
     }
 
-    pub fn next(&mut self) -> f32 {
+    pub fn sample(&mut self) -> f32 {
         self.current += (self.target - self.current) * (1.0 - self.coefficient);
         if (self.current - self.target).abs() < 1e-7 {
             self.current = self.target;
@@ -56,7 +56,7 @@ impl SmoothedValue {
 
     pub fn process_block(&mut self, samples: &mut [f32]) {
         for sample in samples.iter_mut() {
-            let gain = self.next();
+            let gain = self.sample();
             *sample *= gain;
         }
     }
@@ -97,7 +97,7 @@ impl Ramp {
         self.start + (self.target - self.start) * progress
     }
 
-    pub fn next(&mut self) -> f32 {
+    pub fn sample(&mut self) -> f32 {
         let value = self.current();
         if self.position < self.length {
             self.position += 1;
@@ -156,7 +156,7 @@ mod tests {
     fn instant_smoothing_reaches_target_immediately() {
         let mut value = SmoothedValue::new(0.0, 48000, 0.0);
         value.set_target(1.0);
-        assert_eq!(value.next(), 1.0);
+        assert_eq!(value.sample(), 1.0);
     }
 
     #[test]
@@ -165,7 +165,7 @@ mod tests {
         value.set_target(1.0);
         let mut previous = value.current();
         for _ in 0..2000 {
-            let next = value.next();
+            let next = value.sample();
             assert!(next >= previous);
             assert!(next <= 1.0);
             previous = next;
@@ -176,7 +176,7 @@ mod tests {
     fn smoothing_settles() {
         let mut value = SmoothedValue::new(0.0, 48000, 5.0);
         value.set_target(0.5);
-        for _ in 0..5000 { value.next(); }
+        for _ in 0..5000 { value.sample(); }
         assert!(value.settled());
     }
 
@@ -201,11 +201,11 @@ mod tests {
     fn ramp_linear_shape() {
         let mut ramp = Ramp::new(0.0, 4);
         ramp.retarget(1.0);
-        let values: Vec<f32> = (0..4).map(|_| ramp.next()).collect();
+        let values: Vec<f32> = (0..4).map(|_| ramp.sample()).collect();
         assert!((values[0] - 0.0).abs() < 1e-6);
         assert!((values[1] - 0.25).abs() < 1e-6);
         assert!((values[3] - 0.75).abs() < 1e-6);
-        assert!((ramp.next() - 1.0).abs() < 1e-6);
+        assert!((ramp.sample() - 1.0).abs() < 1e-6);
         assert!(ramp.is_done());
     }
 
@@ -213,8 +213,8 @@ mod tests {
     fn ramp_retarget_starts_from_current() {
         let mut ramp = Ramp::new(0.0, 8);
         ramp.retarget(1.0);
-        ramp.next();
-        ramp.next();
+        ramp.sample();
+        ramp.sample();
         ramp.retarget(0.5);
         assert!(ramp.current() > 0.0 && ramp.current() < 0.5);
     }
@@ -223,6 +223,6 @@ mod tests {
     fn zero_length_ramp_is_instant() {
         let mut ramp = Ramp::new(1.0, 0);
         ramp.retarget(0.0);
-        assert_eq!(ramp.next(), 0.0);
+        assert_eq!(ramp.sample(), 0.0);
     }
 }
