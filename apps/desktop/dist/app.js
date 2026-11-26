@@ -372,6 +372,21 @@ function boot() {
       try { await invoke('install_factory_presets', { dir: prDir() }); refreshPresets(); }
       catch(e) { toast('Install failed: ' + e); }
     };
+    document.getElementById('pr_export').onclick = async () => {
+      try {
+        const path = document.getElementById('pr_bundle').value;
+        await invoke('export_presets_to_file', { dir: prDir(), path });
+        toast('Presets exported', 'ok');
+      } catch(e) { toast('Export failed: ' + e); }
+    };
+    document.getElementById('pr_import').onclick = async () => {
+      try {
+        const path = document.getElementById('pr_bundle').value;
+        const n = await invoke('import_presets_from_file', { dir: prDir(), path, overwrite: false });
+        refreshPresets();
+        toast('Imported ' + n + ' presets', 'ok');
+      } catch(e) { toast('Import failed: ' + e); }
+    };
     refreshPresets();
     async function refreshToggles() {
       try {

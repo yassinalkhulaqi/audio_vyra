@@ -7,6 +7,7 @@ use aurivo_audio_engine::{AppState, AudioEngine, EqBandInfo};
 use config::Config;
 use aurivo_core::LevelMeter;
 use presets::Preset;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
@@ -201,6 +202,26 @@ fn install_factory_presets(dir: String) -> Result<Vec<String>, String> {
     presets::install_factory(&dir).map_err(|e| e.to_string())
 }
 #[tauri::command]
+fn export_presets(dir: String) -> Result<presets::PresetBundle, String> {
+    presets::export_bundle(&dir).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn import_presets(dir: String, bundle: presets::PresetBundle, overwrite: bool) -> Result<usize, String> {
+    presets::import_bundle(&dir, &bundle, overwrite).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn export_presets_to_file(dir: String, path: String) -> Result<(), String> {
+    let bundle = presets::export_bundle(&dir).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string_pretty(&bundle).map_err(|e| e.to_string())?;
+    fs::write(path, text).map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn import_presets_from_file(dir: String, path: String, overwrite: bool) -> Result<usize, String> {
+    let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let bundle: presets::PresetBundle = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    presets::import_bundle(&dir, &bundle, overwrite).map_err(|e| e.to_string())
+}
+#[tauri::command]
 fn load_preset(dir: String, name: String) -> Result<Preset, String> {
     presets::load(&dir, &name).map_err(|e| e.to_string())
 }
@@ -314,7 +335,7 @@ fn main() {
             get_eq_bands, set_eq_band, add_eq_band, remove_eq_band, set_pitch, get_pitch,
             spectrum, set_output_gain, get_output_gain, set_output_muted, is_output_muted,
             start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback,
-            list_presets, save_preset, load_preset, delete_preset, install_factory_presets, apply_preset, get_state, set_state, load_config, save_config, stream_info,
+            list_presets, save_preset, load_preset, delete_preset, install_factory_presets, export_presets, import_presets, export_presets_to_file, import_presets_from_file, apply_preset, get_state, set_state, load_config, save_config, stream_info,
             audio_stats, reset_audio_stats, reset_clip, rt_stats, reset_rt_stats, buffered_ms,
             list_effects, set_effect_enabled, effect_enabled, remove_effect, move_effect, reorder_effects, set_vocal, get_vocal
         ])
