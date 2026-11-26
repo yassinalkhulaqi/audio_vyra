@@ -65,6 +65,7 @@
   <div class="panel">
     <h2>Audio health</h2>
     <div class="row"><span id="audio_stats" class="status">overruns 0 · underruns 0</span><button id="stats_reset">Reset</button></div>
+    <div class="row"><span id="rt_stats" class="status">skips 0/0/0/0</span><button id="rt_stats_reset">Reset</button></div>
   </div>
   <div class="panel">
     <h2>Effects (enable / bypass)</h2>
@@ -177,6 +178,8 @@
         document.getElementById('clip').style.color = l.clipped ? '#f85149' : '#8b949e';
         const st = await invoke('audio_stats');
         document.getElementById('audio_stats').textContent = `overruns ${st[0]} · underruns ${st[1]}`;
+        const rt = await invoke('rt_stats');
+        document.getElementById('rt_stats').textContent = `skips fx ${rt[0]} · fft ${rt[1]} · rec ${rt[2]} · rate ${rt[3]}`;
       } catch(e) {}
     }, 100);
     let dl = [300, 0.35, 0.3, 0.2];
@@ -607,6 +610,7 @@
       } catch(e) { alert('Load config failed: ' + e); }
     };
     document.getElementById('stats_reset').onclick = async () => { await invoke('reset_audio_stats'); };
+    document.getElementById('rt_stats_reset').onclick = async () => { await invoke('reset_rt_stats'); };
     document.getElementById('clip_reset').onclick = async () => { await invoke('reset_clip'); };
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];

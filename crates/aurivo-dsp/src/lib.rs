@@ -11,6 +11,7 @@ pub mod distortion;
 pub mod modulation;
 pub mod eq;
 pub mod pitch;
+pub mod rt_param;
 pub mod analysis;
 pub mod vocal;
 

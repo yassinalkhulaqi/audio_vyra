@@ -3,6 +3,7 @@ pub mod chain;
 pub mod channels;
 pub mod recorder;
 pub mod resampler;
+pub mod rt_stats;
 pub mod state;
 
 use aurivo_core::{AurivoError, Result, LevelMeter};
@@ -11,6 +12,7 @@ use chain::EffectChain;
 use channels::downmix_into;
 use recorder::{RecorderState, read_wav, write_wav};
 use resampler::LinearResampler;
+use rt_stats::{RtSnapshot, RtStats};
 use aurivo_dsp::{Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, SpectrumAnalyzer, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -49,6 +51,7 @@ pub struct AudioEngine {
     overruns: Arc<AtomicU64>,
     underruns: Arc<AtomicU64>,
     resampler: Arc<Mutex<LinearResampler>>,
+    rt_stats: Arc<RtStats>,
     playback_stream: Option<cpal::Stream>,
     vocal: Arc<Mutex<VocalParams>>,
     running: bool,
@@ -112,6 +115,7 @@ impl AudioEngine {
             overruns,
             underruns,
             resampler,
+            rt_stats: RtStats::new(),
             playback_stream: None,
             vocal: vocal_shared,
             running: false,
@@ -165,6 +169,7 @@ impl AudioEngine {
         let underruns = self.underruns.clone();
         let analyzer = self.analyzer.clone();
         let recorder = self.recorder.clone();
+        let rt_stats = self.rt_stats.clone();
         let mut mono_scratch = vec![0.0f32; 256];
         let in_stream = input_dev.build_input_stream(
             in_cfg.into(),
@@ -174,10 +179,21 @@ impl AudioEngine {
                 }
                 let n = downmix_into(data, ch, &mut mono_scratch);
                 let buf = &mut mono_scratch[..n];
-                if let Ok(mut c) = chain.try_lock() { c.process(buf); }
+                if let Ok(mut c) = chain.try_lock() {
+                    c.process(buf);
+                } else {
+                    rt_stats.bump_chain();
+                }
                 meter.process(buf);
-                if let Ok(mut a) = analyzer.try_lock() { a.push(buf); }
-                if let Ok(mut rec) = recorder.lock() { rec.push(buf); }
+                if let Ok(mut a) = analyzer.try_lock() {
+                    a.push(buf);
+                } else {
+                    rt_stats.bump_analyzer();
+                }
+                match recorder.try_lock() {
+                    Ok(mut rec) => rec.push(buf),
+                    Err(_) => rt_stats.bump_recorder(),
+                }
                 let pushed = prod.push_slice(buf);
                 if pushed < buf.len() {
                     overruns.fetch_add((buf.len() - pushed) as u64, Ordering::Relaxed);
@@ -190,6 +206,7 @@ impl AudioEngine {
         let output_gain = self.output_gain.clone();
         let output_muted = self.output_muted.clone();
         let resampler = self.resampler.clone();
+        let rt_stats = self.rt_stats.clone();
         let mut mono_in = vec![0.0f32; 512];
         let mut resampled = vec![0.0f32; 1024];
         let out_stream = output_dev.build_output_stream(
@@ -213,7 +230,10 @@ impl AudioEngine {
                         resample,
                         out_ch,
                     ),
-                    Err(_) => 0,
+                    Err(_) => {
+                        rt_stats.bump_resampler();
+                        0
+                    }
                 };
                 if written < data.len() {
                     underruns.fetch_add((data.len() - written) as u64, Ordering::Relaxed);
@@ -263,6 +283,15 @@ impl AudioEngine {
     pub fn reset_audio_stats(&self) {
         self.overruns.store(0, Ordering::Relaxed);
         self.underruns.store(0, Ordering::Relaxed);
+        self.rt_stats.reset();
+    }
+
+    pub fn rt_stats(&self) -> RtSnapshot {
+        self.rt_stats.snapshot()
+    }
+
+    pub fn reset_rt_stats(&self) {
+        self.rt_stats.reset();
     }
     pub fn stream_info(&self) -> (u32, u32, u16) {
         (self.sample_rate, self.output_sample_rate, self.channels)
@@ -403,9 +432,12 @@ impl AudioEngine {
     }
 
     pub fn save_recording(&self, path: &str) -> Result<()> {
-        let rec = self.recorder.lock().map_err(|_| AurivoError::InvalidConfig("recorder lock poisoned".into()))?;
-        let sr = if rec.sample_rate > 0 { rec.sample_rate } else { self.sample_rate };
-        write_wav(path, &rec.samples, sr, rec.channels)?;
+        let (samples, sr, channels) = {
+            let rec = self.recorder.lock().map_err(|_| AurivoError::InvalidConfig("recorder lock poisoned".into()))?;
+            let sr = if rec.sample_rate > 0 { rec.sample_rate } else { self.sample_rate };
+            (rec.samples.clone(), sr, rec.channels)
+        };
+        write_wav(path, &samples, sr, channels)?;
         Ok(())
     }
 

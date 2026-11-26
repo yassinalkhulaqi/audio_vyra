@@ -151,7 +151,7 @@ impl BiquadState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EqParams {
     pub bands: Vec<EqBand>,
     pub version: u64,
@@ -179,9 +179,11 @@ impl EqParams {
 pub struct ParametricEq {
     shared: Arc<Mutex<EqParams>>,
     states: Vec<BiquadState>,
+    bands: Vec<EqBand>,
     last_version: u64,
     sample_rate: f32,
     bypass: bool,
+    skipped_polls: u64,
 }
 
 impl ParametricEq {
@@ -190,11 +192,13 @@ impl ParametricEq {
         let params = EqParams::with_defaults(sr);
         let states = params.bands.iter().map(|b| BiquadState::new(b, sr)).collect();
         Self {
-            shared: Arc::new(Mutex::new(params)),
+            shared: Arc::new(Mutex::new(params.clone())),
             states,
+            bands: params.bands,
             last_version: 0,
             sample_rate: sr,
             bypass: false,
+            skipped_polls: 0,
         }
     }
 
@@ -219,23 +223,34 @@ impl ParametricEq {
         }
     }
 
+    /// Refresh cached coefficients with a single non-blocking poll. When the
+    /// UI holds the lock we keep the last known good bands and states, so the
+    /// audio callback never waits and never observes a half-updated band list.
     fn sync_params(&mut self) {
-        if let Ok(params) = self.shared.lock() {
-            if params.version != self.last_version {
-                if self.states.len() != params.bands.len() {
-                    self.states = params
-                        .bands
-                        .iter()
-                        .map(|b| BiquadState::new(b, self.sample_rate))
-                        .collect();
-                } else {
-                    for (state, band) in self.states.iter_mut().zip(params.bands.iter()) {
-                        state.set_band(band, self.sample_rate);
+        match self.shared.try_lock() {
+            Ok(params) => {
+                if params.version != self.last_version {
+                    self.bands = params.bands.clone();
+                    if self.states.len() != self.bands.len() {
+                        self.states = self
+                            .bands
+                            .iter()
+                            .map(|b| BiquadState::new(b, self.sample_rate))
+                            .collect();
+                    } else {
+                        for (state, band) in self.states.iter_mut().zip(self.bands.iter()) {
+                            state.set_band(band, self.sample_rate);
+                        }
                     }
+                    self.last_version = params.version;
                 }
-                self.last_version = params.version;
             }
+            Err(_) => self.skipped_polls += 1,
         }
+    }
+
+    pub fn skipped_polls(&self) -> u64 {
+        self.skipped_polls
     }
 
     pub fn process(&mut self, samples: &mut [f32]) {
@@ -243,17 +258,14 @@ impl ParametricEq {
             return;
         }
         self.sync_params();
-        if let Ok(params) = self.shared.lock() {
-            let bands = &params.bands;
-            for s in samples.iter_mut() {
-                let mut value = *s;
-                for (state, band) in self.states.iter_mut().zip(bands.iter()) {
-                    if band.enabled {
-                        value = state.process(value);
-                    }
+        for s in samples.iter_mut() {
+            let mut value = *s;
+            for (state, band) in self.states.iter_mut().zip(self.bands.iter()) {
+                if band.enabled {
+                    value = state.process(value);
                 }
-                *s = value;
             }
+            *s = value;
         }
     }
 }

@@ -3,6 +3,7 @@
 //! uses a cascade of first-order all-pass filters whose coefficient sweeps.
 
 use std::sync::{Arc, Mutex};
+use crate::rt_param::{try_snapshot, try_update, RtParam};
 
 #[derive(Debug, Clone)]
 pub struct ModulationParams {
@@ -26,7 +27,7 @@ pub struct Modulation {
     phase: f32,
     allpass: Vec<f32>,
     sample_rate: f32,
-    params: Arc<Mutex<ModulationParams>>,
+    params: RtParam<ModulationParams>,
     bypass: bool,
 }
 
@@ -42,14 +43,14 @@ impl Modulation {
             phase: 0.0,
             allpass: vec![0.0; 4],
             sample_rate: sample_rate as f32,
-            params: Arc::new(Mutex::new(params)),
+            params: RtParam::new(Arc::new(Mutex::new(params.clone())), params),
             bypass: false,
         }
     }
 
     pub fn shared(sample_rate: u32) -> (Self, Arc<Mutex<ModulationParams>>) {
         let fx = Self::new(sample_rate);
-        let handle = fx.params.clone();
+        let handle = fx.params.handle();
         (fx, handle)
     }
 
@@ -68,22 +69,24 @@ impl Modulation {
     }
 
     pub fn snapshot(handle: &Arc<Mutex<ModulationParams>>) -> ModulationParams {
-        handle.lock().map(|p| p.clone()).unwrap_or_default()
+        try_snapshot(handle, ModulationParams::default())
     }
 
     pub fn update(handle: &Arc<Mutex<ModulationParams>>, params: ModulationParams) {
-        if let Ok(mut current) = handle.lock() {
-            *current = params;
-        }
+        try_update(handle, params);
+    }
+
+    pub fn skipped_polls(&self) -> u64 {
+        self.params.skipped()
     }
 
     pub fn process(&mut self, samples: &mut [f32]) {
         if self.bypass {
             return;
         }
-        let (mode, rate, depth, feedback, mix) = match self.params.lock() {
-            Ok(p) => (p.mode, p.rate_hz, p.depth, p.feedback, p.mix),
-            Err(_) => return,
+        let (mode, rate, depth, feedback, mix) = {
+            let p = self.params.poll();
+            (p.mode, p.rate_hz, p.depth, p.feedback, p.mix)
         };
         let rate = rate.clamp(0.01, 20.0);
         let depth = depth.clamp(0.0, 1.0);

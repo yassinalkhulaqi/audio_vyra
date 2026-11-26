@@ -270,6 +270,14 @@ fn reset_clip(state: State<'_, Mutex<AudioEngine>>) {
     state.lock().unwrap().reset_clip()
 }
 #[tauri::command]
+fn rt_stats(state: State<'_, Mutex<AudioEngine>>) -> [u64; 4] {
+    state.lock().unwrap().rt_stats().as_array()
+}
+#[tauri::command]
+fn reset_rt_stats(state: State<'_, Mutex<AudioEngine>>) {
+    state.lock().unwrap().reset_rt_stats()
+}
+#[tauri::command]
 fn set_vocal(state: State<'_, Mutex<AudioEngine>>, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
     state.lock().unwrap().set_vocal(mode, carrier_hz, vowel, depth, mix)
 }
@@ -299,7 +307,7 @@ fn main() {
             spectrum, set_output_gain, get_output_gain, set_output_muted, is_output_muted,
             start_recording, stop_recording, is_recording, recorded_samples, save_recording, play_wav, stop_playback,
             list_presets, save_preset, load_preset, delete_preset, install_factory_presets, apply_preset, get_state, set_state, load_config, save_config, stream_info,
-            audio_stats, reset_audio_stats, reset_clip,
+            audio_stats, reset_audio_stats, reset_clip, rt_stats, reset_rt_stats,
             list_effects, set_effect_enabled, effect_enabled, remove_effect, move_effect, set_vocal, get_vocal
         ])
         .run(tauri::generate_context!())

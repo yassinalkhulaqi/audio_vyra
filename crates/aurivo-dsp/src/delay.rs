@@ -4,6 +4,7 @@
 
 use std::sync::{Arc, Mutex};
 use crate::denormal::flush;
+use crate::rt_param::{try_snapshot, try_update, RtParam};
 
 #[derive(Debug, Clone)]
 pub struct DelayParams {
@@ -25,7 +26,7 @@ pub struct Delay {
     write: usize,
     filtered: f32,
     sample_rate: f32,
-    params: Arc<Mutex<DelayParams>>,
+    params: RtParam<DelayParams>,
     bypass: bool,
 }
 
@@ -41,14 +42,14 @@ impl Delay {
             write: 0,
             filtered: 0.0,
             sample_rate: sample_rate as f32,
-            params: Arc::new(Mutex::new(params)),
+            params: RtParam::new(Arc::new(Mutex::new(params.clone())), params),
             bypass: false,
         }
     }
 
     pub fn shared(sample_rate: u32) -> (Self, Arc<Mutex<DelayParams>>) {
         let delay = Self::new(sample_rate);
-        let handle = delay.params.clone();
+        let handle = delay.params.handle();
         (delay, handle)
     }
 
@@ -66,22 +67,25 @@ impl Delay {
     }
 
     pub fn snapshot(handle: &Arc<Mutex<DelayParams>>) -> DelayParams {
-        handle.lock().map(|p| p.clone()).unwrap_or_default()
+        try_snapshot(handle, DelayParams::default())
     }
 
     pub fn update(handle: &Arc<Mutex<DelayParams>>, params: DelayParams) {
-        if let Ok(mut current) = handle.lock() {
-            *current = params;
-        }
+        try_update(handle, params);
+    }
+
+    /// Number of parameter polls that reused the cached snapshot.
+    pub fn skipped_polls(&self) -> u64 {
+        self.params.skipped()
     }
 
     pub fn process(&mut self, samples: &mut [f32]) {
         if self.bypass {
             return;
         }
-        let (time_ms, feedback, mix, damp) = match self.params.lock() {
-            Ok(p) => (p.time_ms, p.feedback, p.mix, p.damp),
-            Err(_) => return,
+        let (time_ms, feedback, mix, damp) = {
+            let p = self.params.poll();
+            (p.time_ms, p.feedback, p.mix, p.damp)
         };
         let len = self.buffer.len();
         let delay_samples = ((time_ms * self.sample_rate / 1000.0) as usize)

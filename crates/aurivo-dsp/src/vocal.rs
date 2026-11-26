@@ -3,6 +3,7 @@
 //! five vowels and can be morphed continuously by a fractional vowel index.
 
 use std::sync::{Arc, Mutex};
+use crate::rt_param::{try_snapshot, try_update, RtParam};
 use crate::denormal::flush;
 
 #[derive(Debug, Clone)]
@@ -77,7 +78,7 @@ pub struct Vocal {
     hold_counter: f32,
     held_amplitude: f32,
     sample_rate: f32,
-    params: Arc<Mutex<VocalParams>>,
+    params: RtParam<VocalParams>,
     bypass: bool,
 }
 
@@ -99,14 +100,14 @@ impl Vocal {
             hold_counter: 0.0,
             held_amplitude: 0.0,
             sample_rate: sr,
-            params: Arc::new(Mutex::new(params)),
+            params: RtParam::new(Arc::new(Mutex::new(params.clone())), params),
             bypass: false,
         }
     }
 
     pub fn shared(sample_rate: u32) -> (Self, Arc<Mutex<VocalParams>>) {
         let fx = Self::new(sample_rate);
-        let handle = fx.params.clone();
+        let handle = fx.params.handle();
         (fx, handle)
     }
 
@@ -125,13 +126,15 @@ impl Vocal {
     }
 
     pub fn snapshot(handle: &Arc<Mutex<VocalParams>>) -> VocalParams {
-        handle.lock().map(|p| p.clone()).unwrap_or_default()
+        try_snapshot(handle, VocalParams::default())
     }
 
     pub fn update(handle: &Arc<Mutex<VocalParams>>, params: VocalParams) {
-        if let Ok(mut current) = handle.lock() {
-            *current = params;
-        }
+        try_update(handle, params);
+    }
+
+    pub fn skipped_polls(&self) -> u64 {
+        self.params.skipped()
     }
 
     fn formant_targets(vowel: f32) -> [f32; 3] {
@@ -150,9 +153,9 @@ impl Vocal {
         if self.bypass {
             return;
         }
-        let (mode, carrier, vowel, depth, mix) = match self.params.lock() {
-            Ok(p) => (p.mode, p.carrier_hz, p.vowel, p.depth, p.mix),
-            Err(_) => return,
+        let (mode, carrier, vowel, depth, mix) = {
+            let p = self.params.poll();
+            (p.mode, p.carrier_hz, p.vowel, p.depth, p.mix)
         };
         let mix = mix.clamp(0.0, 1.0);
         let depth = depth.clamp(0.0, 1.0);
