@@ -5,8 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  check:
+  libraries:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,13 +18,21 @@ jobs:
           components: rustfmt, clippy
       - name: Install audio dev libraries
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
-      - name: Format (advisory)
-        continue-on-error: true
+      - name: Format
         run: cargo fmt --all -- --check
-      - name: Clippy (advisory)
-        continue-on-error: true
-        run: cargo clippy -p aurivo-core -p aurivo-dsp -p aurivo-audio-engine --all-targets
+      - name: Clippy
+        run: cargo clippy -p aurivo-core -p aurivo-dsp -p aurivo-audio-engine --all-targets -- -D warnings
       - name: Tests
         run: cargo test -p aurivo-core -p aurivo-dsp -p aurivo-audio-engine
       - name: Build libraries
         run: cargo build -p aurivo-core -p aurivo-dsp -p aurivo-audio-engine --release
+
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check desktop crate
+        run: cargo check -p aurivo-desktop --all-targets
+      - name: Test desktop crate
+        run: cargo test -p aurivo-desktop

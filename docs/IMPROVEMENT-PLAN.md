@@ -1,6 +1,13 @@
 # AURIVO — Improvement Plan v2
 
-Status: all 9 feature branches merged into `main`. This plan takes the project from "everything works in one window" to "solid, testable, pleasant to use."
+Status: all 9 original feature branches merged into `main`, followed by the
+audio-correctness, real-time-safety, DSP-correctness, test-expansion, UI-split,
+UI-controls, presets-v3 and config-security workstreams. This plan is retained
+for historical context; the current system is described in
+[`ARCHITECTURE.md`](ARCHITECTURE.md) and the decision records in `decisions/`.
+
+Remaining optional work from the original plan: MIDI integration, per-parameter
+automation, A/B compare, latency compensation and installer packaging.
 
 Guiding principles:
 - Keep the DSP core dependency-free and real-time safe.
