@@ -39,6 +39,7 @@ impl Biquad {
         Self { b0: b0/a0, b1: b1/a0, b2: b2/a0, a1: a1/a0, a2: a2/a0, z1:0.0, z2:0.0, bypass:false }
     }
     pub fn set_bypass(&mut self, b: bool) { self.bypass = b; }
+    pub fn is_bypassed(&self) -> bool { self.bypass }
     pub fn process(&mut self, samples: &mut [f32]) {
         if self.bypass { return; }
         for s in samples.iter_mut() {

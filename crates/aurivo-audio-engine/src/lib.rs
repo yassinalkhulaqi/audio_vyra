@@ -9,7 +9,7 @@ use chain::EffectChain;
 use channels::{downmix, expand};
 use recorder::{RecorderState, read_wav, write_wav};
 use resampler::LinearResampler;
-use aurivo_dsp::{AudioProcessor, Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, SpectrumAnalyzer, Vocal, VocalParams};
+use aurivo_dsp::{Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, SpectrumAnalyzer, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
@@ -119,10 +119,10 @@ impl AudioEngine {
     }
 
     pub fn list_input_devices(&self) -> Vec<String> {
-        self.host.input_devices().map(|mut d| d.map(|dev| dev.description().map(|d| d.name().to_string()).unwrap_or_default()).collect()).unwrap_or_default()
+        self.host.input_devices().map(|d| d.map(|dev| dev.description().map(|d| d.name().to_string()).unwrap_or_default()).collect()).unwrap_or_default()
     }
     pub fn list_output_devices(&self) -> Vec<String> {
-        self.host.output_devices().map(|mut d| d.map(|dev| dev.description().map(|d| d.name().to_string()).unwrap_or_default()).collect()).unwrap_or_default()
+        self.host.output_devices().map(|d| d.map(|dev| dev.description().map(|d| d.name().to_string()).unwrap_or_default()).collect()).unwrap_or_default()
     }
 
     pub fn start(&mut self, input_name: Option<String>, output_name: Option<String>) -> Result<()> {
@@ -151,7 +151,7 @@ impl AudioEngine {
         let resample = sr != out_sr;
         if let Ok(mut r) = self.resampler.lock() { r.set_rates(sr, out_sr); }
 
-        let ring = HeapRb::<f32>::new((sr as usize * ch as usize * 4) as usize);
+        let ring = HeapRb::<f32>::new(sr as usize * ch as usize * 4);
         let (mut prod, mut cons) = ring.split();
 
         let chain = self.chain.clone();
@@ -225,7 +225,11 @@ impl AudioEngine {
     pub fn stop(&mut self) {
         self.input_stream = None;
         self.output_stream = None;
+        self.playback_stream = None;
         self.running = false;
+        if let Ok(mut rec) = self.recorder.lock() {
+            rec.stop();
+        }
     }
 
     pub fn is_running(&self) -> bool { self.running }
@@ -426,6 +430,10 @@ impl AudioEngine {
         self.chain.lock().map(|mut c| c.move_by(name, delta as isize)).unwrap_or(false)
     }
 
+    pub fn reorder_effects(&self, names: &[String]) -> bool {
+        self.chain.lock().map(|mut c| c.reorder(names)).unwrap_or(false)
+    }
+
     pub fn state(&self) -> AppState {
         let d = self.delay_params();
         let r = self.reverb_params();
@@ -433,6 +441,8 @@ impl AudioEngine {
         let m = self.modulation_params();
         let v = self.vocal_params();
         let mut s = AppState::default();
+        s.chain = self.effect_names();
+        s.enabled = s.chain.iter().map(|n| (n.clone(), self.effect_enabled(n))).collect();
         s.input_gain_db = f32::from_bits(self.gain.load(Ordering::Relaxed));
         s.output_gain_db = self.output_gain_db();
         s.output_muted = self.is_output_muted();
@@ -447,6 +457,12 @@ impl AudioEngine {
     }
 
     pub fn apply_state(&self, s: &AppState) {
+        if !s.chain.is_empty() {
+            self.reorder_effects(&s.chain);
+        }
+        for (name, enabled) in &s.enabled {
+            self.set_effect_enabled(name, *enabled);
+        }
         self.set_input_gain_db(s.input_gain_db);
         self.set_output_gain_db(s.output_gain_db);
         self.set_output_muted(s.output_muted);
@@ -459,6 +475,14 @@ impl AudioEngine {
         let m = &s.modulation;
         self.set_modulation(m[0] as i32, m[1], m[2], m[3], m[4]);
         self.set_pitch_semitones(s.pitch_semitones);
+        let current = self.eq_bands().len();
+        let target = s.eq_bands.len();
+        for i in (target..current).rev() {
+            self.remove_eq_band(i);
+        }
+        for b in s.eq_bands.iter().skip(current) {
+            self.add_eq_band(b.kind, b.frequency, b.q, b.gain_db);
+        }
         for (i, b) in s.eq_bands.iter().enumerate() {
             self.set_eq_band(i, b.kind, b.frequency, b.q, b.gain_db, b.enabled);
         }
@@ -473,5 +497,11 @@ impl AudioEngine {
     pub fn vocal_params(&self) -> (i32, f32, f32, f32, f32) {
         let p = Vocal::snapshot(&self.vocal);
         (p.mode, p.carrier_hz, p.vowel, p.depth, p.mix)
+    }
+}
+
+impl Default for AudioEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }

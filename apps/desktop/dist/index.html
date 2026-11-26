@@ -18,6 +18,7 @@
   .bar { height:100%; width:0%; background:#2ea043; }
   .status { font-size:12px; color:#8b949e; }
   canvas { width:100%; height:120px; background:#0d1117; border:1px solid #30363d; border-radius:8px; }
+  #rms_chart { height:40px; }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:12px; }
   details { background:#11161d; border:1px solid #21262d; border-radius:10px; padding:10px 12px; }
   details[open] { border-color:#30363d; }
@@ -53,8 +54,8 @@
   </div>
   <div class="panel">
     <h2>Configuration</h2>
-    <div class="row"><input id="cfg_path" type="text" value="aurivo-config.json" /></div>
     <div class="row"><button id="cfg_save">Save config</button><button id="cfg_load">Load config</button></div>
+    <div class="status">Saved in the app config directory</div>
   </div>
   <div class="panel">
     <h2>Session state</h2>
@@ -129,20 +130,32 @@
   </div></details>
 </main>
 <script>
+  function boot() {
     const invoke = window.__TAURI__.core.invoke;
     async function refreshDevices() {
       const ins = await invoke('list_input_devices');
       const outs = await invoke('list_output_devices');
       const isel = document.getElementById('input');
       const osel = document.getElementById('output');
-      isel.innerHTML = ins.map(d=>`<option>${d}</option>`).join('');
-      osel.innerHTML = outs.map(d=>`<option>${d}</option>`).join('');
-    }
+      const fill = (sel, devices) => {
+        sel.replaceChildren(...devices.map(d => {
+          const o = document.createElement('option');
+          o.value = d; o.textContent = d;
+          return o;
+        }));
+      };
+      fill(isel, ins);
+      fill(osel, outs);
+    };
     document.getElementById('start').onclick = async () => {
-      await invoke('start_engine', { input: document.getElementById('input').value, output: document.getElementById('output').value });
-      document.getElementById('status').textContent = 'Running';
-      const si = await invoke('stream_info');
-      document.getElementById('stream_info').textContent = `in ${si[0]} Hz · out ${si[1]} Hz · ${si[2]} ch` + (si[0] !== si[1] ? ' (resampling)' : '');
+      const input = document.getElementById('input').value || null;
+      const output = document.getElementById('output').value || null;
+      try {
+        await invoke('start_engine', { input, output });
+        document.getElementById('status').textContent = 'Running';
+        const si = await invoke('stream_info');
+        document.getElementById('stream_info').textContent = `in ${si[0]} Hz · out ${si[1]} Hz · ${si[2]} ch` + (si[0] !== si[1] ? ' (resampling)' : '');
+      } catch(e) { alert('Start failed: ' + e); }
     };
     document.getElementById('stop').onclick = async () => {
       await invoke('stop_engine');
@@ -167,7 +180,7 @@
       } catch(e) {}
     }, 100);
     let dl = [300, 0.35, 0.3, 0.2];
-    function pushDelay() { invoke('set_delay', { time_ms: dl[0], feedback: dl[1], mix: dl[2], damp: dl[3] }); }
+    function pushDelay() { invoke('set_delay', { timeMs: dl[0], feedback: dl[1], mix: dl[2], damp: dl[3] }); }
     [['time',0],['fb',1],['mix',2],['damp',3]].forEach(([key,i]) => {
       const el = document.getElementById('dl_' + key);
       el.oninput = (e) => {
@@ -185,7 +198,7 @@
       });
     })();
     let rv = [0.6, 0.4, 0.25, 0.85];
-    function pushReverb() { invoke('set_reverb', { room_size: rv[0], damp: rv[1], wet: rv[2], dry: rv[3] }); }
+    function pushReverb() { invoke('set_reverb', { roomSize: rv[0], damp: rv[1], wet: rv[2], dry: rv[3] }); }
     [['room',0],['damp',1],['wet',2],['dry',3]].forEach(([key,i]) => {
       const el = document.getElementById('rv_' + key);
       el.oninput = (e) => {
@@ -203,7 +216,7 @@
       });
     })();
     let ds = [0, 12, 0.6, 0.5, 1, 8];
-    function pushDist() { invoke('set_distortion', { mode: ds[0], drive_db: ds[1], tone: ds[2], mix: ds[3], downsample: ds[4], bit_depth: ds[5] }); }
+    function pushDist() { invoke('set_distortion', { mode: ds[0], driveDb: ds[1], tone: ds[2], mix: ds[3], downsample: ds[4], bitDepth: ds[5] }); }
     const dsMode = document.getElementById('ds_mode');
     dsMode.onchange = (e) => { ds[0] = parseInt(e.target.value); pushDist(); };
     const distFmt = (key, v) => key === 'drive' ? v + ' dB' : (key === 'down' ? v + 'x' : (key === 'bits' ? String(v) : v.toFixed(2)));
@@ -225,7 +238,7 @@
       });
     })();
     let mo = [0, 1.5, 0.4, 0.3, 0.5];
-    function pushMod() { invoke('set_modulation', { mode: mo[0], rate_hz: mo[1], depth: mo[2], feedback: mo[3], mix: mo[4] }); }
+    function pushMod() { invoke('set_modulation', { mode: mo[0], rateHz: mo[1], depth: mo[2], feedback: mo[3], mix: mo[4] }); }
     const moMode = document.getElementById('mo_mode');
     moMode.onchange = (e) => { mo[0] = parseInt(e.target.value); pushMod(); };
     [['rate',1,' Hz'],['depth',2,''],['fb',3,''],['mix',4,'']].forEach(([key,i,suffix]) => {
@@ -311,7 +324,7 @@
         function pushBand() {
           invoke('set_eq_band', {
             index: i, kind: state.kind, frequency: state.frequency,
-            q: state.q, gain_db: state.gain_db, enabled: state.enabled
+            q: state.q, gainDb: state.gain_db, enabled: state.enabled
           });
         }
 
@@ -324,7 +337,7 @@
       const addBtn = document.createElement('button');
       addBtn.textContent = '+ Add band';
       addBtn.onclick = async () => {
-        await invoke('add_eq_band', { kind: 0, frequency: 1000, q: 1.0, gain_db: 0 });
+        await invoke('add_eq_band', { kind: 0, frequency: 1000, q: 1.0, gainDb: 0 });
         await loadEq();
       };
       addRow.appendChild(addBtn);
@@ -437,11 +450,23 @@
     async function refreshPresets() {
       try {
         const names = await invoke('list_presets', { dir: prDir() });
-        document.getElementById('pr_list').innerHTML = names.map(n=>`<option>${n}</option>`).join('');
+        const sel = document.getElementById('pr_list');
+        sel.replaceChildren(...names.map(n => {
+          const o = document.createElement('option');
+          o.value = n; o.textContent = n;
+          return o;
+        }));
       } catch(e) {}
     }
     document.getElementById('pr_save').onclick = async () => {
-      const preset = { name: document.getElementById('pr_name').value, params: collectPresetParams(), enabled: {}, chain: [] };
+      const s = await invoke('get_state');
+      const preset = {
+        name: document.getElementById('pr_name').value,
+        params: collectPresetParams(),
+        enabled: s.enabled,
+        chain: s.chain,
+        eq_bands: s.eq_bands,
+      };
       try { await invoke('save_preset', { dir: prDir(), preset }); refreshPresets(); }
       catch(e) { alert('Save failed: ' + e); }
     };
@@ -450,30 +475,9 @@
       if (!name) return;
       try {
         const p = await invoke('load_preset', { dir: prDir(), name });
-        await invoke('apply_preset', { params: p.params });
-        const sliders = [
-          ['gain','gain_db',''], ['out_gain','output_gain_db',' dB'],
-          ['dl_time','delay_time',' ms'], ['dl_fb','delay_feedback',''], ['dl_mix','delay_mix',''], ['dl_damp','delay_damp',''],
-          ['rv_room','reverb_room',''], ['rv_damp','reverb_damp',''], ['rv_wet','reverb_wet',''], ['rv_dry','reverb_dry',''],
-          ['ds_drive','dist_drive',' dB'], ['ds_tone','dist_tone',''], ['ds_mix','dist_mix',''], ['ds_down','dist_down','x'], ['ds_bits','dist_bits',''],
-          ['mo_rate','mod_rate',' Hz'], ['mo_depth','mod_depth',''], ['mo_fb','mod_fb',''], ['mo_mix','mod_mix',''],
-          ['pitch','pitch',' st'],
-        ];
-        for (const [elId, key, suffix] of sliders) {
-          const v = p.params[key];
-          if (typeof v !== 'number') continue;
-          document.getElementById(elId).value = v;
-          const dispId = elId === 'gain' ? 'gainval' : (elId === 'pitch' ? 'pitchval' : elId + 'v');
-          const disp = document.getElementById(dispId);
-          if (disp) disp.textContent = v + suffix;
-        }
-        if (typeof p.params.output_muted === 'number') document.getElementById('out_mute').checked = p.params.output_muted === 1;
-        if (typeof p.params.dist_mode === 'number') document.getElementById('ds_mode').value = p.params.dist_mode;
-        if (typeof p.params.mod_mode === 'number') document.getElementById('mo_mode').value = p.params.mod_mode;
-        const vm = [['vocal_mode',0],['vocal_carrier',1],['vowel',2],['vocal_depth',3],['vocal_mix',4]];
-        vm.forEach(([k,i]) => { if (typeof p.params[k] === 'number') vo[i] = p.params[k]; });
-        syncVocalUI();
-        document.getElementById('pr_info').textContent = Object.keys(p.params).length + ' params';
+        await invoke('apply_preset', { preset: p });
+        await syncAll();
+        document.getElementById('pr_info').textContent = 'Loaded ' + p.name;
       } catch(e) { alert('Load failed: ' + e); }
     };
     document.getElementById('pr_delete').onclick = async () => {
@@ -487,34 +491,43 @@
       catch(e) { alert('Install failed: ' + e); }
     };
     refreshPresets();
-    (async () => {
+    async function refreshToggles() {
       try {
         const names = await invoke('list_effects');
         const box = document.getElementById('fx_toggles');
+        box.replaceChildren();
         for (const n of names) {
           const label = document.createElement('label');
           label.style.marginRight = '14px';
           const cb = document.createElement('input');
           cb.type = 'checkbox';
           cb.checked = await invoke('effect_enabled', { name: n });
-          cb.onchange = async () => { await invoke('set_effect_enabled', { name: n, enabled: cb.checked }); };
+          cb.onchange = async () => {
+            await invoke('set_effect_enabled', { name: n, enabled: cb.checked });
+            await refreshToggles();
+            await loadChain();
+          };
           label.append(cb, document.createTextNode(' ' + n));
           box.appendChild(label);
         }
       } catch(e) {}
-    })();
+    }
+    refreshToggles();
     async function loadChain() {
       try {
         const names = await invoke('list_effects');
         const box = document.getElementById('fx_chain');
-        box.innerHTML = '';
+        box.replaceChildren();
         for (const n of names) {
           const row = document.createElement('div');
           row.className = 'row';
           const cb = document.createElement('input');
           cb.type = 'checkbox';
           cb.checked = await invoke('effect_enabled', { name: n });
-          cb.onchange = async () => { await invoke('set_effect_enabled', { name: n, enabled: cb.checked }); };
+          cb.onchange = async () => {
+            await invoke('set_effect_enabled', { name: n, enabled: cb.checked });
+            await refreshToggles();
+          };
           const label = document.createElement('span');
           label.textContent = n;
           const up = document.createElement('button');
@@ -523,38 +536,73 @@
           const down = document.createElement('button');
           down.textContent = '\u2193';
           down.onclick = async () => { await invoke('move_effect', { name: n, delta: 1 }); await loadChain(); };
-          const del = document.createElement('button');
-          del.textContent = '\u00d7';
-          del.onclick = async () => { await invoke('remove_effect', { name: n }); await loadChain(); };
-          row.append(cb, label, up, down, del);
+          row.append(cb, label, up, down);
           box.appendChild(row);
         }
       } catch(e) {}
     }
     loadChain();
+    function setVal(id, v, dispId, text) {
+      const el = document.getElementById(id);
+      if (el) el.value = v;
+      const disp = document.getElementById(dispId);
+      if (disp) disp.textContent = text;
+    }
+    async function syncAll() {
+      const s = await invoke('get_state');
+      setVal('gain', s.input_gain_db, 'gainval', String(s.input_gain_db));
+      setVal('out_gain', s.output_gain_db, 'out_gainv', s.output_gain_db.toFixed(1) + ' dB');
+      document.getElementById('out_mute').checked = s.output_muted;
+      dl = s.delay.slice(); rv = s.reverb.slice(); ds = s.distortion.slice(); mo = s.modulation.slice(); vo = s.vocal.slice();
+      [['time',0],['fb',1],['mix',2],['damp',3]].forEach(([k,i]) => {
+        setVal('dl_' + k, dl[i], 'dl_' + k + 'v', k === 'time' ? dl[i] + ' ms' : dl[i].toFixed(2));
+      });
+      [['room',0],['damp',1],['wet',2],['dry',3]].forEach(([k,i]) => {
+        setVal('rv_' + k, rv[i], 'rv_' + k + 'v', rv[i].toFixed(2));
+      });
+      [['drive',1],['tone',2],['mix',3],['down',4],['bits',5]].forEach(([k,i]) => {
+        setVal('ds_' + k, ds[i], 'ds_' + k + 'v', distFmt(k, ds[i]));
+      });
+      dsMode.value = ds[0];
+      [['rate',1],['depth',2],['fb',3],['mix',4]].forEach(([k,i]) => {
+        setVal('mo_' + k, mo[i], 'mo_' + k + 'v', k === 'rate' ? mo[i].toFixed(1) + ' Hz' : mo[i].toFixed(2));
+      });
+      moMode.value = mo[0];
+      setVal('pitch', s.pitch_semitones, 'pitchval', s.pitch_semitones + ' st');
+      syncVocalUI();
+      await loadEq();
+      await refreshToggles();
+      await loadChain();
+    }
     document.getElementById('st_dump').onclick = async () => {
       try { document.getElementById('st_json').value = JSON.stringify(await invoke('get_state'), null, 2); }
       catch(e) { alert('Dump failed: ' + e); }
     };
     document.getElementById('st_apply').onclick = async () => {
-      try { await invoke('set_state', { newState: JSON.parse(document.getElementById('st_json').value) }); }
-      catch(e) { alert('Apply failed: ' + e); }
+      try {
+        await invoke('set_state', { newState: JSON.parse(document.getElementById('st_json').value) });
+        await syncAll();
+      } catch(e) { alert('Apply failed: ' + e); }
     };
     document.getElementById('cfg_save').onclick = async () => {
-      const cfg = { input_device: document.getElementById('input').value, output_device: document.getElementById('output').value,
-        params: { gain_db: parseFloat(document.getElementById('gain').value) || 0 } };
-      try { await invoke('save_config', { path: document.getElementById('cfg_path').value, cfg }); }
+      const cfg = {
+        input_device: document.getElementById('input').value || null,
+        output_device: document.getElementById('output').value || null,
+        params: { gain_db: parseFloat(document.getElementById('gain').value) || 0 },
+        state: await invoke('get_state'),
+      };
+      try { await invoke('save_config', { cfg }); }
       catch(e) { alert('Save config failed: ' + e); }
     };
     document.getElementById('cfg_load').onclick = async () => {
       try {
-        const cfg = await invoke('load_config', { path: document.getElementById('cfg_path').value });
+        const cfg = await invoke('load_config');
         if (cfg.input_device) document.getElementById('input').value = cfg.input_device;
         if (cfg.output_device) document.getElementById('output').value = cfg.output_device;
-        if (typeof cfg.params.gain_db === 'number') {
-          document.getElementById('gain').value = cfg.params.gain_db;
-          document.getElementById('gainval').textContent = cfg.params.gain_db;
+        if (cfg.state) { await invoke('set_state', { newState: cfg.state }); await syncAll(); }
+        else if (typeof cfg.params.gain_db === 'number') {
           await invoke('set_input_gain', { db: cfg.params.gain_db });
+          await syncAll();
         }
       } catch(e) { alert('Load config failed: ' + e); }
     };
@@ -562,7 +610,7 @@
     document.getElementById('clip_reset').onclick = async () => { await invoke('reset_clip'); };
     let vo = [0, 40, 0, 0.6, 0.6];
     const vowels = ['A','E','I','O','U'];
-    function pushVocal() { invoke('set_vocal', { mode: vo[0], carrier_hz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
+    function pushVocal() { invoke('set_vocal', { mode: vo[0], carrierHz: vo[1], vowel: vo[2], depth: vo[3], mix: vo[4] }); }
     const voMode = document.getElementById('vo_mode');
     voMode.onchange = (e) => { vo[0] = parseInt(e.target.value); pushVocal(); };
     const vowelFmt = (v) => vowels[Math.round(v)] || 'A';
@@ -593,6 +641,9 @@
     })();
     refreshDevices();
     loadEq();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
   </script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 //! JSON preset persistence for complete effect state.
 
+use aurivo_audio_engine::EqBandInfo;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -14,6 +15,8 @@ pub struct Preset {
     pub enabled: BTreeMap<String, bool>,
     #[serde(default)]
     pub chain: Vec<String>,
+    #[serde(default)]
+    pub eq_bands: Vec<EqBandInfo>,
 }
 
 pub fn default_chain() -> Vec<String> {
@@ -107,7 +110,6 @@ pub fn factory_presets() -> Vec<Preset> {
 
     let mut radio = BTreeMap::new();
     radio.insert("gain_db".into(), 6.0);
-    radio.insert("highpass".into(), 300.0);
     radio.insert("dist_mode".into(), 1.0);
     radio.insert("dist_drive".into(), 18.0);
     radio.insert("dist_down".into(), 8.0);
@@ -136,9 +138,9 @@ pub fn factory_presets() -> Vec<Preset> {
     shred.insert("vocal_mix".into(), 0.2);
 
     vec![
-        Preset { name: "Warm Vocal".into(), params: warm, enabled: default_enabled(), chain: default_chain() },
-        Preset { name: "Radio".into(), params: radio, enabled: default_enabled(), chain: default_chain() },
-        Preset { name: "Shred".into(), params: shred, enabled: default_enabled(), chain: default_chain() },
+        Preset { name: "Warm Vocal".into(), params: warm, enabled: default_enabled(), chain: default_chain(), eq_bands: Vec::new() },
+        Preset { name: "Radio".into(), params: radio, enabled: default_enabled(), chain: default_chain(), eq_bands: Vec::new() },
+        Preset { name: "Shred".into(), params: shred, enabled: default_enabled(), chain: default_chain(), eq_bands: Vec::new() },
     ]
 }
 
@@ -148,4 +150,39 @@ pub fn install_factory(dir: &str) -> io::Result<Vec<String>> {
         save(dir, &p)?;
     }
     list(dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preset_round_trips_state_fields() {
+        let dir = std::env::temp_dir().join(format!("aurivo-presets-test-{}", std::process::id()));
+        let mut params = BTreeMap::new();
+        params.insert("gain_db".into(), 3.0);
+        let preset = Preset {
+            name: "My Voice!".into(),
+            params,
+            enabled: default_enabled(),
+            chain: default_chain(),
+            eq_bands: Vec::new(),
+        };
+        save(dir.to_str().unwrap(), &preset).unwrap();
+        let loaded = load(dir.to_str().unwrap(), "My Voice!").unwrap();
+        assert_eq!(loaded.name, preset.name);
+        assert_eq!(loaded.params.get("gain_db"), Some(&3.0));
+        assert_eq!(loaded.chain.len(), 11);
+        assert!(loaded.enabled.values().all(|v| *v));
+        assert!(list(dir.to_str().unwrap()).unwrap().contains(&"My_Voice".to_string()));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn factory_presets_have_no_dead_highpass_key() {
+        for p in factory_presets() {
+            assert!(!p.params.contains_key("highpass"));
+            assert_eq!(p.chain.len(), p.enabled.len());
+        }
+    }
 }

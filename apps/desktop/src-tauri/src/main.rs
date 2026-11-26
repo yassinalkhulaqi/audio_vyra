@@ -7,9 +7,53 @@ use aurivo_audio_engine::{AppState, AudioEngine, EqBandInfo};
 use config::Config;
 use aurivo_core::LevelMeter;
 use presets::Preset;
-use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
+
+fn config_path(app: &AppHandle) -> PathBuf {
+    app.path()
+        .app_config_dir()
+        .map(|p| p.join("config.json"))
+        .unwrap_or_else(|_| PathBuf::from("aurivo-config.json"))
+}
+
+fn preset_to_state(p: &Preset) -> AppState {
+    let mut s = AppState::default();
+    let get = |k: &str| p.params.get(k).copied();
+    if let Some(v) = get("gain_db") { s.input_gain_db = v; }
+    if let Some(v) = get("output_gain_db") { s.output_gain_db = v; }
+    if let Some(v) = get("output_muted") { s.output_muted = v != 0.0; }
+    if let Some(v) = get("delay_time") { s.delay[0] = v; }
+    if let Some(v) = get("delay_feedback") { s.delay[1] = v; }
+    if let Some(v) = get("delay_mix") { s.delay[2] = v; }
+    if let Some(v) = get("delay_damp") { s.delay[3] = v; }
+    if let Some(v) = get("reverb_room") { s.reverb[0] = v; }
+    if let Some(v) = get("reverb_damp") { s.reverb[1] = v; }
+    if let Some(v) = get("reverb_wet") { s.reverb[2] = v; }
+    if let Some(v) = get("reverb_dry") { s.reverb[3] = v; }
+    if let Some(v) = get("dist_mode") { s.distortion[0] = v; }
+    if let Some(v) = get("dist_drive") { s.distortion[1] = v; }
+    if let Some(v) = get("dist_tone") { s.distortion[2] = v; }
+    if let Some(v) = get("dist_mix") { s.distortion[3] = v; }
+    if let Some(v) = get("dist_down") { s.distortion[4] = v; }
+    if let Some(v) = get("dist_bits") { s.distortion[5] = v; }
+    if let Some(v) = get("mod_mode") { s.modulation[0] = v; }
+    if let Some(v) = get("mod_rate") { s.modulation[1] = v; }
+    if let Some(v) = get("mod_depth") { s.modulation[2] = v; }
+    if let Some(v) = get("mod_fb") { s.modulation[3] = v; }
+    if let Some(v) = get("mod_mix") { s.modulation[4] = v; }
+    if let Some(v) = get("pitch") { s.pitch_semitones = v; }
+    if let Some(v) = get("vocal_mode") { s.vocal[0] = v; }
+    if let Some(v) = get("vocal_carrier") { s.vocal[1] = v; }
+    if let Some(v) = get("vowel") { s.vocal[2] = v; }
+    if let Some(v) = get("vocal_depth") { s.vocal[3] = v; }
+    if let Some(v) = get("vocal_mix") { s.vocal[4] = v; }
+    if !p.chain.is_empty() { s.chain = p.chain.clone(); }
+    if !p.enabled.is_empty() { s.enabled = p.enabled.clone(); }
+    if !p.eq_bands.is_empty() { s.eq_bands = p.eq_bands.clone(); }
+    s
+}
 
 #[tauri::command]
 fn list_input_devices(state: State<'_, Mutex<AudioEngine>>) -> Vec<String> {
@@ -165,28 +209,13 @@ fn delete_preset(dir: String, name: String) -> Result<(), String> {
     presets::delete(&dir, &name).map_err(|e| e.to_string())
 }
 #[tauri::command]
-fn apply_preset(state: State<'_, Mutex<AudioEngine>>, params: BTreeMap<String, f32>) {
+fn apply_preset(state: State<'_, Mutex<AudioEngine>>, preset: Preset) {
     let engine = state.lock().unwrap();
-    let get = |k: &str| params.get(k).copied();
-    if let Some(v) = get("gain_db") { engine.set_input_gain_db(v); }
-    if let Some(v) = get("output_gain_db") { engine.set_output_gain_db(v); }
-    if let Some(v) = get("output_muted") { engine.set_output_muted(v != 0.0); }
-    if let (Some(a), Some(b), Some(c), Some(d)) = (get("delay_time"), get("delay_feedback"), get("delay_mix"), get("delay_damp")) {
-        engine.set_delay(a, b, c, d);
+    let mut snapshot = preset_to_state(&preset);
+    if snapshot.eq_bands.is_empty() {
+        snapshot.eq_bands = engine.eq_bands();
     }
-    if let (Some(a), Some(b), Some(c), Some(d)) = (get("reverb_room"), get("reverb_damp"), get("reverb_wet"), get("reverb_dry")) {
-        engine.set_reverb(a, b, c, d);
-    }
-    if let (Some(a), Some(b), Some(c), Some(d), Some(e), Some(f)) = (get("dist_mode"), get("dist_drive"), get("dist_tone"), get("dist_mix"), get("dist_down"), get("dist_bits")) {
-        engine.set_distortion(a as i32, b, c, d, e, f);
-    }
-    if let (Some(a), Some(b), Some(c), Some(d), Some(e)) = (get("mod_mode"), get("mod_rate"), get("mod_depth"), get("mod_fb"), get("mod_mix")) {
-        engine.set_modulation(a as i32, b, c, d, e);
-    }
-    if let Some(v) = get("pitch") { engine.set_pitch_semitones(v); }
-    if let (Some(a), Some(b), Some(c), Some(d), Some(e)) = (get("vocal_mode"), get("vocal_carrier"), get("vowel"), get("vocal_depth"), get("vocal_mix")) {
-        engine.set_vocal(a as i32, b, c, d, e);
-    }
+    engine.apply_state(&snapshot);
 }
 #[tauri::command]
 fn list_effects(state: State<'_, Mutex<AudioEngine>>) -> Vec<String> {
@@ -217,12 +246,12 @@ fn set_state(state: State<'_, Mutex<AudioEngine>>, new_state: AppState) {
     state.lock().unwrap().apply_state(&new_state);
 }
 #[tauri::command]
-fn load_config(path: String) -> Result<Config, String> {
-    config::load(&path).map_err(|e| e.to_string())
+fn load_config(app: AppHandle) -> Result<Config, String> {
+    config::load(config_path(&app)).map_err(|e| e.to_string())
 }
 #[tauri::command]
-fn save_config(path: String, cfg: Config) -> Result<(), String> {
-    config::save(&path, &cfg).map_err(|e| e.to_string())
+fn save_config(app: AppHandle, cfg: Config) -> Result<(), String> {
+    config::save(config_path(&app), &cfg).map_err(|e| e.to_string())
 }
 #[tauri::command]
 fn stream_info(state: State<'_, Mutex<AudioEngine>>) -> (u32, u32, u16) {
@@ -250,14 +279,19 @@ fn get_vocal(state: State<'_, Mutex<AudioEngine>>) -> (i32, f32, f32, f32, f32) 
 }
 
 fn main() {
-    let engine = AudioEngine::new();
-    if let Ok(cfg) = config::load("aurivo-config.json") {
-        if let Some(&db) = cfg.params.get("gain_db") {
-            engine.set_input_gain_db(db);
-        }
-    }
     tauri::Builder::default()
-        .manage(Mutex::new(engine))
+        .manage(Mutex::new(AudioEngine::new()))
+        .setup(|app| {
+            let cfg = config::load(config_path(app.handle())).unwrap_or_default();
+            let engine = app.state::<Mutex<AudioEngine>>();
+            let engine = engine.lock().unwrap();
+            if let Some(s) = cfg.state {
+                engine.apply_state(&s);
+            } else if let Some(db) = cfg.params.get("gain_db") {
+                engine.set_input_gain_db(*db);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_input_devices, list_output_devices, start_engine, stop_engine, engine_status, levels, set_input_gain,
             set_delay, get_delay, set_reverb, get_reverb, set_distortion, get_distortion, set_modulation, get_modulation,

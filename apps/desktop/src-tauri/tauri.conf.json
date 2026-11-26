@@ -4,6 +4,7 @@
   "identifier": "com.aurivo.desktop",
   "build": { "frontendDist": "../dist" },
   "app": {
+    "withGlobalTauri": true,
     "windows": [{ "title": "AURIVO", "width": 1100, "height": 720 }],
     "security": { "csp": null }
   },

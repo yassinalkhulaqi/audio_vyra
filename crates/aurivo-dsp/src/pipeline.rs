@@ -19,6 +19,7 @@ impl ProcessingPipeline {
         }
     }
     pub fn len(&self) -> usize { self.processors.len() }
+    pub fn is_empty(&self) -> bool { self.processors.is_empty() }
     pub fn names(&self) -> Vec<&'static str> { self.processors.iter().map(|p| p.name()).collect() }
     pub fn find(&self, name: &str) -> Option<usize> { self.processors.iter().position(|p| p.name() == name) }
     pub fn bypass(&self, index: usize) -> bool { self.processors.get(index).map(|p| p.bypass()).unwrap_or(false) }
@@ -32,6 +33,15 @@ impl ProcessingPipeline {
         if a < self.processors.len() && b < self.processors.len() {
             self.processors.swap(a, b);
         }
+    }
+    pub fn move_by(&mut self, from: usize, to: usize) {
+        if from < self.processors.len() && to < self.processors.len() && from != to {
+            let p = self.processors.remove(from);
+            self.processors.insert(to, p);
+        }
+    }
+    pub fn take(&mut self) -> Vec<Box<dyn AudioProcessor>> {
+        std::mem::take(&mut self.processors)
     }
 }
 
@@ -51,22 +61,25 @@ use crate::vocal::Vocal;
 impl AudioProcessor for Gain {
     fn name(&self) -> &'static str { "gain" }
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Gain::process(self, samples); }
-    fn bypass(&self) -> bool { false }
+    fn bypass(&self) -> bool { Gain::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { Gain::set_bypass(self, b); }
 }
 impl AudioProcessor for NoiseGate {
     fn name(&self) -> &'static str { "gate" }
     fn process(&mut self, samples: &mut [f32], _sr: u32) { NoiseGate::process(self, samples); }
+    fn bypass(&self) -> bool { NoiseGate::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { NoiseGate::set_bypass(self, b); }
 }
 impl AudioProcessor for Compressor {
     fn name(&self) -> &'static str { "compressor" }
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Compressor::process(self, samples); }
+    fn bypass(&self) -> bool { Compressor::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { Compressor::set_bypass(self, b); }
 }
 impl AudioProcessor for Biquad {
     fn name(&self) -> &'static str { "highpass" }
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Biquad::process(self, samples); }
+    fn bypass(&self) -> bool { Biquad::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { Biquad::set_bypass(self, b); }
 }
 impl AudioProcessor for LevelMeterProcessor {

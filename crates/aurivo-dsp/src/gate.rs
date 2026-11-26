@@ -15,6 +15,7 @@ impl NoiseGate {
         Self { threshold_db, attack_ms, release_ms, envelope: 0.0, sample_rate, bypass: false }
     }
     pub fn set_bypass(&mut self, b: bool) { self.bypass = b; }
+    pub fn is_bypassed(&self) -> bool { self.bypass }
     pub fn process(&mut self, samples: &mut [f32]) {
         if self.bypass { return; }
         let thr = 10f32.powf(self.threshold_db / 20.0);

@@ -1,4 +1,4 @@
-﻿use aurivo_dsp::{Gain, LevelMeterProcessor, ProcessingPipeline, AudioProcessor};
+﻿use aurivo_dsp::{Gain, LevelMeterProcessor, ProcessingPipeline};
 
 #[test]
 fn gain_amplifies() {

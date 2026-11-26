@@ -85,11 +85,6 @@ impl PitchShifter {
         }
     }
 
-    fn index_of(&self, read: f64) -> usize {
-        let base = read.floor() as i64;
-        base.rem_euclid(self.mask as i64 + 1) as usize & self.mask
-    }
-
     pub fn process(&mut self, samples: &mut [f32]) {
         if self.bypass {
             return;
