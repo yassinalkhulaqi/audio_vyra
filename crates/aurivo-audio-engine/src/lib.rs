@@ -334,7 +334,14 @@ impl AudioEngine {
 
     #[allow(clippy::too_many_arguments)]
     pub fn set_distortion(&self, mode: i32, drive_db: f32, tone: f32, mix: f32, downsample: f32, bit_depth: f32) {
-        Distortion::update(&self.distortion, DistortionParams { mode, drive_db, tone, mix, downsample, bit_depth });
+        Distortion::update(&self.distortion, DistortionParams {
+            mode: aurivo_dsp::validate::safe_mode(mode, 2),
+            drive_db,
+            tone,
+            mix,
+            downsample,
+            bit_depth,
+        });
     }
 
     pub fn distortion_params(&self) -> (i32, f32, f32, f32, f32, f32) {
@@ -343,7 +350,13 @@ impl AudioEngine {
     }
 
     pub fn set_modulation(&self, mode: i32, rate_hz: f32, depth: f32, feedback: f32, mix: f32) {
-        Modulation::update(&self.modulation, ModulationParams { mode, rate_hz, depth, feedback, mix });
+        Modulation::update(&self.modulation, ModulationParams {
+            mode: aurivo_dsp::validate::safe_mode(mode, 3),
+            rate_hz,
+            depth,
+            feedback,
+            mix,
+        });
     }
 
     pub fn modulation_params(&self) -> (i32, f32, f32, f32, f32) {
@@ -562,7 +575,13 @@ impl AudioEngine {
     }
 
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {
-        Vocal::update(&self.vocal, VocalParams { mode, carrier_hz, vowel, depth, mix });
+        Vocal::update(&self.vocal, VocalParams {
+            mode: aurivo_dsp::validate::safe_mode(mode, 3),
+            carrier_hz,
+            vowel,
+            depth,
+            mix,
+        });
     }
 
     pub fn vocal_params(&self) -> (i32, f32, f32, f32, f32) {

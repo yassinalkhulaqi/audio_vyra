@@ -14,6 +14,11 @@ impl ProcessingPipeline {
     pub fn new(sample_rate: u32) -> Self { Self { processors: Vec::new(), sample_rate } }
     pub fn add(&mut self, p: Box<dyn AudioProcessor>) { self.processors.push(p); }
     pub fn process(&mut self, samples: &mut [f32]) {
+        for s in samples.iter_mut() {
+            if !s.is_finite() {
+                *s = 0.0;
+            }
+        }
         for p in self.processors.iter_mut() {
             p.process(samples, self.sample_rate);
         }
