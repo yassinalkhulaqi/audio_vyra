@@ -45,6 +45,7 @@ vyra/
 ├── AGENTS.md                          # commands for humans and agents
 ├── CONTRIBUTING.md                    # branch/commit/test expectations
 ├── CHANGELOG.md
+├── crates/aurivo-cli/                  # diagnostic CLI for presets/state/WAV
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── IMPROVEMENT-PLAN.md

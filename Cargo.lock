@@ -111,6 +111,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "aurivo-cli"
+version = "0.1.0"
+dependencies = [
+ "aurivo-audio-engine",
+ "serde_json",
+]
+
+[[package]]
 name = "aurivo-core"
 version = "0.1.0"
 dependencies = [

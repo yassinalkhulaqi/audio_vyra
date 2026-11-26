@@ -1,0 +1,8 @@
+[package]
+name = "aurivo-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aurivo-audio-engine = { path = "../aurivo-audio-engine" }
+serde_json = "1"
