@@ -1,3 +1,4 @@
+pub mod audio_path;
 pub mod chain;
 pub mod channels;
 pub mod recorder;
@@ -5,8 +6,9 @@ pub mod resampler;
 pub mod state;
 
 use aurivo_core::{AurivoError, Result, LevelMeter};
+use audio_path::{adapt_playback, mono_ring_capacity, prepare_output_frames, StreamFormat};
 use chain::EffectChain;
-use channels::{downmix, expand};
+use channels::downmix_into;
 use recorder::{RecorderState, read_wav, write_wav};
 use resampler::LinearResampler;
 use aurivo_dsp::{Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, SpectrumAnalyzer, Vocal, VocalParams};
@@ -53,6 +55,7 @@ pub struct AudioEngine {
     sample_rate: u32,
     output_sample_rate: u32,
     channels: u16,
+    input_channels: u16,
 }
 
 impl AudioEngine {
@@ -115,6 +118,7 @@ impl AudioEngine {
             sample_rate: sr,
             output_sample_rate: sr,
             channels: 1,
+            input_channels: 1,
         }
     }
 
@@ -148,10 +152,11 @@ impl AudioEngine {
             return Err(AurivoError::Stream("output device does not support f32".into()));
         }
         let out_sr = out_cfg.sample_rate();
+        let out_ch = out_cfg.channels();
         let resample = sr != out_sr;
         if let Ok(mut r) = self.resampler.lock() { r.set_rates(sr, out_sr); }
 
-        let ring = HeapRb::<f32>::new(sr as usize * ch as usize * 4);
+        let ring = HeapRb::<f32>::new(mono_ring_capacity(sr, 4));
         let (mut prod, mut cons) = ring.split();
 
         let chain = self.chain.clone();
@@ -160,19 +165,22 @@ impl AudioEngine {
         let underruns = self.underruns.clone();
         let analyzer = self.analyzer.clone();
         let recorder = self.recorder.clone();
+        let mut mono_scratch = vec![0.0f32; 256];
         let in_stream = input_dev.build_input_stream(
             in_cfg.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let mut buf = downmix(data, ch);
-                if let Ok(mut c) = chain.try_lock() { c.process(&mut buf); }
-                meter.process(&buf);
-                if let Ok(mut a) = analyzer.try_lock() { a.push(&buf); }
-                if let Ok(mut rec) = recorder.lock() { rec.push(&buf); }
-                let mut expanded = vec![0.0f32; buf.len() * ch as usize];
-                expand(&buf, ch, &mut expanded);
-                let pushed = prod.push_slice(&expanded);
-                if pushed < expanded.len() {
-                    overruns.fetch_add((expanded.len() - pushed) as u64, Ordering::Relaxed);
+                if mono_scratch.len() < data.len() / ch.max(1) as usize + 1 {
+                    mono_scratch.resize(data.len() / ch.max(1) as usize + 1, 0.0);
+                }
+                let n = downmix_into(data, ch, &mut mono_scratch);
+                let buf = &mut mono_scratch[..n];
+                if let Ok(mut c) = chain.try_lock() { c.process(buf); }
+                meter.process(buf);
+                if let Ok(mut a) = analyzer.try_lock() { a.push(buf); }
+                if let Ok(mut rec) = recorder.lock() { rec.push(buf); }
+                let pushed = prod.push_slice(buf);
+                if pushed < buf.len() {
+                    overruns.fetch_add((buf.len() - pushed) as u64, Ordering::Relaxed);
                 }
             },
             |err| eprintln!("input stream error: {err}"),
@@ -182,19 +190,34 @@ impl AudioEngine {
         let output_gain = self.output_gain.clone();
         let output_muted = self.output_muted.clone();
         let resampler = self.resampler.clone();
+        let mut mono_in = vec![0.0f32; 512];
+        let mut resampled = vec![0.0f32; 1024];
         let out_stream = output_dev.build_output_stream(
             out_cfg.into(),
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                let n = if resample {
-                    let mut src = vec![0.0f32; data.len() * 2 + 8];
-                    let got = cons.pop_slice(&mut src);
-                    if let Ok(mut r) = resampler.lock() { r.process(&src[..got], data) } else { 0 }
-                } else {
-                    cons.pop_slice(data)
+                let frames = data.len().div_ceil(out_ch.max(1) as usize);
+                if mono_in.len() < frames {
+                    mono_in.resize(frames, 0.0);
+                }
+                if resampled.len() < frames + 8 {
+                    resampled.resize(frames + 8, 0.0);
+                }
+                let got = cons.pop_slice(&mut mono_in[..frames]);
+                let written = match resampler.try_lock() {
+                    Ok(mut r) => prepare_output_frames(
+                        &mono_in[..got],
+                        &mut r,
+                        &mut [],
+                        &mut resampled,
+                        data,
+                        resample,
+                        out_ch,
+                    ),
+                    Err(_) => 0,
                 };
-                if n < data.len() {
-                    underruns.fetch_add((data.len() - n) as u64, Ordering::Relaxed);
-                    data[n..].fill(0.0);
+                if written < data.len() {
+                    underruns.fetch_add((data.len() - written) as u64, Ordering::Relaxed);
+                    data[written..].fill(0.0);
                 }
                 let muted = output_muted.load(Ordering::Relaxed);
                 let gain = f32::from_bits(output_gain.load(Ordering::Relaxed));
@@ -214,7 +237,8 @@ impl AudioEngine {
         self.running = true;
         self.sample_rate = sr;
         self.output_sample_rate = out_sr;
-        self.channels = ch;
+        self.channels = out_ch;
+        self.input_channels = ch;
         if let Ok(mut rec) = self.recorder.lock() {
             rec.sample_rate = sr;
             rec.channels = 1;
@@ -242,6 +266,17 @@ impl AudioEngine {
     }
     pub fn stream_info(&self) -> (u32, u32, u16) {
         (self.sample_rate, self.output_sample_rate, self.channels)
+    }
+
+    pub fn input_channels(&self) -> u16 {
+        self.input_channels
+    }
+
+    pub fn stream_formats(&self) -> (StreamFormat, StreamFormat) {
+        (
+            StreamFormat::new(self.sample_rate, self.input_channels),
+            StreamFormat::new(self.output_sample_rate, self.channels),
+        )
     }
     pub fn levels(&self) -> LevelMeter {
         LevelMeter { peak: self.meter.peak(), rms: self.meter.rms(), clipped: self.meter.clipped() }
@@ -382,7 +417,10 @@ impl AudioEngine {
         if cfg.sample_format() != cpal::SampleFormat::F32 {
             return Err(AurivoError::Stream("output device does not support f32".into()));
         }
-        let state = Arc::new(Mutex::new((decoded.samples, 0usize)));
+        let file_format = StreamFormat::new(decoded.sample_rate, decoded.channels);
+        let device_format = StreamFormat::new(cfg.sample_rate(), cfg.channels());
+        let samples = adapt_playback(&decoded.samples, file_format, device_format);
+        let state = Arc::new(Mutex::new((samples, 0usize)));
         let stream = device.build_output_stream(
             cfg.into(),
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
