@@ -14,6 +14,11 @@ impl ProcessingPipeline {
     pub fn new(sample_rate: u32) -> Self { Self { processors: Vec::new(), sample_rate } }
     pub fn add(&mut self, p: Box<dyn AudioProcessor>) { self.processors.push(p); }
     pub fn process(&mut self, samples: &mut [f32]) {
+        for s in samples.iter_mut() {
+            if !s.is_finite() {
+                *s = 0.0;
+            }
+        }
         for p in self.processors.iter_mut() {
             p.process(samples, self.sample_rate);
         }
@@ -57,6 +62,7 @@ use crate::modulation::Modulation;
 use crate::eq::ParametricEq;
 use crate::pitch::PitchShifter;
 use crate::vocal::Vocal;
+use crate::limiter::PeakLimiter;
 
 impl AudioProcessor for Gain {
     fn name(&self) -> &'static str { "gain" }
@@ -127,4 +133,10 @@ impl AudioProcessor for Vocal {
     fn process(&mut self, samples: &mut [f32], _sr: u32) { Vocal::process(self, samples); }
     fn bypass(&self) -> bool { Vocal::is_bypassed(self) }
     fn set_bypass(&mut self, b: bool) { Vocal::set_bypass(self, b); }
+}
+impl AudioProcessor for PeakLimiter {
+    fn name(&self) -> &'static str { "limiter" }
+    fn process(&mut self, samples: &mut [f32], _sr: u32) { PeakLimiter::process(self, samples); }
+    fn bypass(&self) -> bool { PeakLimiter::is_bypassed(self) }
+    fn set_bypass(&mut self, b: bool) { PeakLimiter::set_bypass(self, b); }
 }

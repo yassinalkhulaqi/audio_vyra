@@ -4,6 +4,7 @@
 
 use std::sync::{Arc, Mutex};
 use crate::denormal::flush;
+use crate::rt_param::{try_snapshot, try_update, RtParam};
 
 #[derive(Debug, Clone)]
 pub struct ReverbParams {
@@ -73,7 +74,7 @@ impl Allpass {
 pub struct Reverb {
     combs: Vec<Comb>,
     allpasses: Vec<Allpass>,
-    params: Arc<Mutex<ReverbParams>>,
+    params: RtParam<ReverbParams>,
     bypass: bool,
 }
 
@@ -98,14 +99,14 @@ impl Reverb {
         Self {
             combs,
             allpasses,
-            params: Arc::new(Mutex::new(params)),
+            params: RtParam::new(Arc::new(Mutex::new(params.clone())), params),
             bypass: false,
         }
     }
 
     pub fn shared(sample_rate: u32) -> (Self, Arc<Mutex<ReverbParams>>) {
         let reverb = Self::new(sample_rate);
-        let handle = reverb.params.clone();
+        let handle = reverb.params.handle();
         (reverb, handle)
     }
 
@@ -127,22 +128,29 @@ impl Reverb {
     }
 
     pub fn snapshot(handle: &Arc<Mutex<ReverbParams>>) -> ReverbParams {
-        handle.lock().map(|p| p.clone()).unwrap_or_default()
+        try_snapshot(handle, ReverbParams::default())
     }
 
     pub fn update(handle: &Arc<Mutex<ReverbParams>>, params: ReverbParams) {
-        if let Ok(mut current) = handle.lock() {
-            *current = params;
-        }
+        try_update(handle, params);
+    }
+
+    pub fn skipped_polls(&self) -> u64 {
+        self.params.skipped()
     }
 
     pub fn process(&mut self, samples: &mut [f32]) {
         if self.bypass {
             return;
         }
-        let (room, damp, wet, dry) = match self.params.lock() {
-            Ok(p) => (p.room_size.clamp(0.0, 1.0), p.damp.clamp(0.0, 1.0), p.wet.clamp(0.0, 1.0), p.dry.clamp(0.0, 1.0)),
-            Err(_) => return,
+        let (room, damp, wet, dry) = {
+            let p = self.params.poll();
+            (
+                p.room_size.clamp(0.0, 1.0),
+                p.damp.clamp(0.0, 1.0),
+                p.wet.clamp(0.0, 1.0),
+                p.dry.clamp(0.0, 1.0),
+            )
         };
         let feedback = 0.7 + 0.28 * room;
         let allpass_feedback = 0.5;

@@ -3,6 +3,7 @@
 //! five vowels and can be morphed continuously by a fractional vowel index.
 
 use std::sync::{Arc, Mutex};
+use crate::rt_param::{try_snapshot, try_update, RtParam};
 use crate::denormal::flush;
 
 #[derive(Debug, Clone)]
@@ -41,7 +42,7 @@ struct Bandpass {
 
 impl Bandpass {
     fn new(freq: f32, q: f32, sample_rate: f32) -> Self {
-        let freq = freq.clamp(20.0, sample_rate * 0.5 - 20.0);
+        let freq = crate::validate::safe_frequency(freq, sample_rate).max(20.0);
         let w0 = 2.0 * std::f32::consts::PI * freq / sample_rate;
         let alpha = w0.sin() / (2.0 * q.clamp(0.1, 20.0));
         let a0 = 1.0 + alpha;
@@ -56,10 +57,18 @@ impl Bandpass {
         }
     }
 
+    /// Retune the filter without discarding its state. Replacing the whole
+    /// biquad at every block boundary produced audible clicks in formant mode;
+    /// a small coefficient glide keeps the filter continuous while it follows
+    /// a morphing vowel.
     fn update(&mut self, freq: f32, q: f32, sample_rate: f32) {
-        *self = Self::new(freq, q, sample_rate);
-        self.z1 = 0.0;
-        self.z2 = 0.0;
+        let next = Self::new(freq, q, sample_rate);
+        const GLIDE: f32 = 0.08;
+        self.b0 += (next.b0 - self.b0) * GLIDE;
+        self.b1 += (next.b1 - self.b1) * GLIDE;
+        self.b2 += (next.b2 - self.b2) * GLIDE;
+        self.a1 += (next.a1 - self.a1) * GLIDE;
+        self.a2 += (next.a2 - self.a2) * GLIDE;
     }
 
     fn process(&mut self, x: f32) -> f32 {
@@ -77,7 +86,7 @@ pub struct Vocal {
     hold_counter: f32,
     held_amplitude: f32,
     sample_rate: f32,
-    params: Arc<Mutex<VocalParams>>,
+    params: RtParam<VocalParams>,
     bypass: bool,
 }
 
@@ -99,14 +108,14 @@ impl Vocal {
             hold_counter: 0.0,
             held_amplitude: 0.0,
             sample_rate: sr,
-            params: Arc::new(Mutex::new(params)),
+            params: RtParam::new(Arc::new(Mutex::new(params.clone())), params),
             bypass: false,
         }
     }
 
     pub fn shared(sample_rate: u32) -> (Self, Arc<Mutex<VocalParams>>) {
         let fx = Self::new(sample_rate);
-        let handle = fx.params.clone();
+        let handle = fx.params.handle();
         (fx, handle)
     }
 
@@ -125,13 +134,15 @@ impl Vocal {
     }
 
     pub fn snapshot(handle: &Arc<Mutex<VocalParams>>) -> VocalParams {
-        handle.lock().map(|p| p.clone()).unwrap_or_default()
+        try_snapshot(handle, VocalParams::default())
     }
 
     pub fn update(handle: &Arc<Mutex<VocalParams>>, params: VocalParams) {
-        if let Ok(mut current) = handle.lock() {
-            *current = params;
-        }
+        try_update(handle, params);
+    }
+
+    pub fn skipped_polls(&self) -> u64 {
+        self.params.skipped()
     }
 
     fn formant_targets(vowel: f32) -> [f32; 3] {
@@ -150,9 +161,9 @@ impl Vocal {
         if self.bypass {
             return;
         }
-        let (mode, carrier, vowel, depth, mix) = match self.params.lock() {
-            Ok(p) => (p.mode, p.carrier_hz, p.vowel, p.depth, p.mix),
-            Err(_) => return,
+        let (mode, carrier, vowel, depth, mix) = {
+            let p = self.params.poll();
+            (p.mode, p.carrier_hz, p.vowel, p.depth, p.mix)
         };
         let mix = mix.clamp(0.0, 1.0);
         let depth = depth.clamp(0.0, 1.0);

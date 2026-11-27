@@ -65,6 +65,7 @@ pub struct SpectrumAnalyzer {
     window: Vec<f32>,
     bins: Vec<Complex>,
     output: Arc<Mutex<Vec<f32>>>,
+    skipped_publishes: u64,
 }
 
 impl SpectrumAnalyzer {
@@ -80,6 +81,7 @@ impl SpectrumAnalyzer {
             window,
             bins: vec![Complex::new(0.0, 0.0); size],
             output: Arc::new(Mutex::new(vec![ -90.0f32; size / 2 ])),
+            skipped_publishes: 0,
         }
     }
 
@@ -97,16 +99,25 @@ impl SpectrumAnalyzer {
         handle.lock().map(|v| v.clone()).unwrap_or_default()
     }
 
+    /// Number of FFT frames whose publication was skipped because the UI held
+    /// the output buffer lock. Audio rendering is never delayed by this.
+    pub fn skipped_publishes(&self) -> u64 {
+        self.skipped_publishes
+    }
+
     fn analyze(&mut self) {
         for i in 0..self.fft_size {
             self.bins[i] = Complex::new(self.input[i] * self.window[i], 0.0);
         }
         fft(&mut self.bins);
-        if let Ok(mut out) = self.output.lock() {
-            for i in 0..out.len() {
-                let magnitude = self.bins[i].magnitude() / self.fft_size as f32;
-                out[i] = 20.0 * magnitude.max(1e-7).log10();
+        match self.output.try_lock() {
+            Ok(mut out) => {
+                for i in 0..out.len() {
+                    let magnitude = self.bins[i].magnitude() / self.fft_size as f32;
+                    out[i] = 20.0 * magnitude.max(1e-7).log10();
+                }
             }
+            Err(_) => self.skipped_publishes += 1,
         }
     }
 

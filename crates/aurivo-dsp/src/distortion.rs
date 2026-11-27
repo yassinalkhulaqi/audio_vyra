@@ -3,6 +3,7 @@
 //! filter and wet/dry mix. All parameters live in a shared handle.
 
 use std::sync::{Arc, Mutex};
+use crate::rt_param::{try_snapshot, try_update, RtParam};
 
 #[derive(Debug, Clone)]
 pub struct DistortionParams {
@@ -22,9 +23,7 @@ impl Default for DistortionParams {
 
 #[derive(Debug)]
 pub struct Distortion {
-    params: Arc<Mutex<DistortionParams>>,
-    #[allow(dead_code)]
-    sample_rate: f32,
+    params: RtParam<DistortionParams>,
     hold_counter: f32,
     held: f32,
     tone_state: f32,
@@ -36,10 +35,9 @@ impl Distortion {
         Self::with_params(sample_rate, DistortionParams::default())
     }
 
-    pub fn with_params(sample_rate: u32, params: DistortionParams) -> Self {
+    pub fn with_params(_sample_rate: u32, params: DistortionParams) -> Self {
         Self {
-            params: Arc::new(Mutex::new(params)),
-            sample_rate: sample_rate as f32,
+            params: RtParam::new(Arc::new(Mutex::new(params.clone())), params),
             hold_counter: 0.0,
             held: 0.0,
             tone_state: 0.0,
@@ -49,7 +47,7 @@ impl Distortion {
 
     pub fn shared(sample_rate: u32) -> (Self, Arc<Mutex<DistortionParams>>) {
         let dist = Self::new(sample_rate);
-        let handle = dist.params.clone();
+        let handle = dist.params.handle();
         (dist, handle)
     }
 
@@ -68,13 +66,15 @@ impl Distortion {
     }
 
     pub fn snapshot(handle: &Arc<Mutex<DistortionParams>>) -> DistortionParams {
-        handle.lock().map(|p| p.clone()).unwrap_or_default()
+        try_snapshot(handle, DistortionParams::default())
     }
 
     pub fn update(handle: &Arc<Mutex<DistortionParams>>, params: DistortionParams) {
-        if let Ok(mut current) = handle.lock() {
-            *current = params;
-        }
+        try_update(handle, params);
+    }
+
+    pub fn skipped_polls(&self) -> u64 {
+        self.params.skipped()
     }
 
     fn shape(x: f32, mode: i32) -> f32 {
@@ -92,9 +92,9 @@ impl Distortion {
         if self.bypass {
             return;
         }
-        let (mode, drive_db, tone, mix, downsample, bit_depth) = match self.params.lock() {
-            Ok(p) => (p.mode, p.drive_db, p.tone, p.mix, p.downsample, p.bit_depth),
-            Err(_) => return,
+        let (mode, drive_db, tone, mix, downsample, bit_depth) = {
+            let p = self.params.poll();
+            (p.mode, p.drive_db, p.tone, p.mix, p.downsample, p.bit_depth)
         };
         let drive = 10f32.powf(drive_db.clamp(-12.0, 48.0) / 20.0);
         let mix = mix.clamp(0.0, 1.0);

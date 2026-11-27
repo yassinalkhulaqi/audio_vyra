@@ -22,7 +22,7 @@ pub struct Preset {
 pub fn default_chain() -> Vec<String> {
     vec![
         "gain", "gate", "compressor", "highpass", "delay", "reverb",
-        "distortion", "modulation", "eq", "pitch", "vocal",
+        "distortion", "modulation", "eq", "pitch", "vocal", "limiter",
     ]
     .into_iter()
     .map(str::to_string)
@@ -172,7 +172,7 @@ mod tests {
         let loaded = load(dir.to_str().unwrap(), "My Voice!").unwrap();
         assert_eq!(loaded.name, preset.name);
         assert_eq!(loaded.params.get("gain_db"), Some(&3.0));
-        assert_eq!(loaded.chain.len(), 11);
+        assert_eq!(loaded.chain.len(), 12);
         assert!(loaded.enabled.values().all(|v| *v));
         assert!(list(dir.to_str().unwrap()).unwrap().contains(&"My_Voice".to_string()));
         fs::remove_dir_all(dir).unwrap();
