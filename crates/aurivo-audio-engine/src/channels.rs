@@ -31,14 +31,14 @@ pub fn downmix_into(interleaved: &[f32], channels: u16, out: &mut [f32]) -> usiz
     }
     let frames = interleaved.len().div_ceil(c);
     let written = frames.min(out.len());
-    for frame in 0..written {
+    for (frame, out_sample) in out.iter_mut().enumerate().take(written) {
         let start = frame * c;
         let end = (start + c).min(interleaved.len());
         let mut sum = 0.0f32;
         for &s in &interleaved[start..end] {
             sum += s;
         }
-        out[frame] = sum / (end - start) as f32;
+        *out_sample = sum / (end - start) as f32;
     }
     written
 }
@@ -56,8 +56,7 @@ pub fn downmix(interleaved: &[f32], channels: u16) -> Vec<f32> {
 pub fn expand_into(mono: &[f32], channels: u16, out: &mut [f32]) -> usize {
     let c = channels.max(1) as usize;
     let frames = mono.len().min(out.len() / c);
-    for frame in 0..frames {
-        let value = mono[frame];
+    for (frame, &value) in mono.iter().enumerate().take(frames) {
         let start = frame * c;
         for sample in out.iter_mut().take(start + c).skip(start) {
             *sample = value;
@@ -98,10 +97,10 @@ pub fn place_channel_into(mono: &[f32], channels: u16, channel: u16, out: &mut [
     let c = channels.max(1) as usize;
     let wanted = channel.max(1).min(channels) as usize - 1;
     let frames = mono.len().min(out.len().div_ceil(c));
-    for frame in 0..frames {
+    for (frame, &value) in mono.iter().enumerate().take(frames) {
         let idx = frame * c + wanted;
         if idx < out.len() {
-            out[idx] = mono[frame];
+            out[idx] = value;
         }
     }
     frames

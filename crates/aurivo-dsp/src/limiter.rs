@@ -82,7 +82,7 @@ impl PeakLimiter {
             return;
         }
         let threshold = 10f32.powf(safe_db(self.params.threshold_db) / 20.0);
-        let ceiling = safe_unit(self.params.ceiling).max(0.1).min(1.0);
+        let ceiling = safe_unit(self.params.ceiling).clamp(0.1, 1.0);
         let attack = envelope_coefficient(self.sample_rate, self.params.attack_ms);
         let release = envelope_coefficient(self.sample_rate, self.params.release_ms);
 

@@ -67,7 +67,23 @@
     <div class="row"><input id="pr_dir" type="text" value="presets" /></div>
     <div class="row"><input id="pr_name" type="text" value="My Voice" /><button id="pr_save">Save</button></div>
     <div class="row"><select id="pr_list"></select><button id="pr_load">Load</button><button id="pr_delete">Delete</button><button id="pr_factory">Factory</button></div>
+    <div class="row"><input id="pr_bundle" type="text" value="presets.json" /><button id="pr_export">Export</button><button id="pr_import">Import</button></div>
     <div class="status" id="pr_info">—</div>
+  </div>
+  <div class="panel">
+    <h2>Automation</h2>
+    <div class="row"><select id="auto_target"><option value="gain_db">Input gain</option><option value="output_gain_db">Output gain</option><option value="pitch">Pitch</option></select><select id="auto_shape"><option value="0">Sine</option><option value="1">Triangle</option><option value="2">Square</option><option value="3">Saw</option></select></div>
+    <div class="row"><label>Rate</label><input id="auto_rate" type="range" min="0.05" max="10" step="0.05" value="1" /><span id="auto_ratev">1.00 Hz</span></div>
+    <div class="row"><label>Depth</label><input id="auto_depth" type="range" min="0" max="24" step="0.5" value="3" /><span id="auto_depthv">3.0</span></div>
+    <div class="row"><button id="auto_add">Add route</button><button id="auto_clear">Clear all</button></div>
+    <div id="auto_list" class="status">No routes</div>
+  </div>
+  <div class="panel">
+    <h2>Controllers</h2>
+    <div class="row"><label>Ch</label><input id="ctl_ch" type="number" min="0" max="15" value="0" style="width:60px;" /><label>CC</label><input id="ctl_cc" type="number" min="0" max="127" value="7" style="width:70px;" /><select id="ctl_target"><option value="gain_db">Input gain</option><option value="output_gain_db">Output gain</option><option value="pitch">Pitch</option></select></div>
+    <div class="row"><label>Value</label><input id="ctl_value" type="range" min="0" max="1" step="0.01" value="0.5" /><button id="ctl_send">Send</button></div>
+    <div class="row"><button id="ctl_bind">Bind</button><button id="ctl_clear">Clear all</button></div>
+    <div id="ctl_list" class="status">No bindings</div>
   </div>
 </aside>
 <main class="cards">

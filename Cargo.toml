@@ -4,5 +4,6 @@ members = [
   "crates/aurivo-core",
   "crates/aurivo-dsp",
   "crates/aurivo-audio-engine",
+  "crates/aurivo-cli",
   "apps/desktop/src-tauri",
 ]

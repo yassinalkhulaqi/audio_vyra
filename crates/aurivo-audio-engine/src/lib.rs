@@ -1,6 +1,7 @@
 pub mod audio_path;
 pub mod chain;
 pub mod channels;
+pub mod control;
 pub mod latency;
 pub mod recorder;
 pub mod resampler;
@@ -15,13 +16,16 @@ use recorder::{RecorderState, read_wav, write_wav};
 use resampler::LinearResampler;
 use rt_stats::{RtSnapshot, RtStats};
 use latency::LatencyTracker;
-use aurivo_dsp::{Gain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, PeakLimiter, SpectrumAnalyzer, Vocal, VocalParams};
+use control::{ControlBinding, ControlMap, ControlMessage};
+use aurivo_dsp::{SmoothedGain, LevelMeterProcessor, NoiseGate, Compressor, Biquad, Delay, DelayParams, Reverb, ReverbParams, Distortion, DistortionParams, Modulation, ModulationParams, ParametricEq, EqBand, EqFilterKind, EqParams, PitchShifter, PeakLimiter, SpectrumAnalyzer, Vocal, VocalParams};
 use aurivo_dsp::eq as eq_ops;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
 use serde::{Deserialize, Serialize};
 pub use state::AppState;
 use std::sync::{Arc, Mutex, atomic::{AtomicU32, AtomicU64, AtomicBool, Ordering}};
+use std::collections::BTreeMap;
+use aurivo_dsp::{AutomationBank, AutomationRoute, LfoShape};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EqBandInfo {
@@ -56,6 +60,9 @@ pub struct AudioEngine {
     rt_stats: Arc<RtStats>,
     latency: Arc<LatencyTracker>,
     buffered_samples: Arc<AtomicU32>,
+    automation: Arc<Mutex<AutomationBank>>,
+    automation_base: Arc<Mutex<BTreeMap<String, f32>>>,
+    control_map: Arc<Mutex<ControlMap>>,
     playback_stream: Option<cpal::Stream>,
     vocal: Arc<Mutex<VocalParams>>,
     running: bool,
@@ -69,7 +76,7 @@ impl AudioEngine {
     pub fn new() -> Self {
         let host = cpal::default_host();
         let sr = 48000u32;
-        let (gain_proc, gain_shared) = Gain::shared();
+        let (gain_proc, gain_shared) = SmoothedGain::shared(sr);
         let mut chain = EffectChain::new(sr);
         chain.add("gain", Box::new(gain_proc));
         chain.add("gate", Box::new(NoiseGate::new(-40.0, 5.0, 50.0, sr as f32)));
@@ -123,6 +130,9 @@ impl AudioEngine {
             rt_stats: RtStats::new(),
             latency: LatencyTracker::new(),
             buffered_samples: Arc::new(AtomicU32::new(0)),
+            automation: Arc::new(Mutex::new(AutomationBank::new())),
+            automation_base: Arc::new(Mutex::new(BTreeMap::new())),
+            control_map: Arc::new(Mutex::new(ControlMap::new())),
             playback_stream: None,
             vocal: vocal_shared,
             running: false,
@@ -339,6 +349,8 @@ impl AudioEngine {
     }
     pub fn reset_clip(&self) { self.meter.reset_clip(); }
     pub fn set_input_gain_db(&self, db: f32) { self.gain.store(db.to_bits(), Ordering::Relaxed); }
+
+    pub fn input_gain_db(&self) -> f32 { f32::from_bits(self.gain.load(Ordering::Relaxed)) }
 
     pub fn set_delay(&self, time_ms: f32, feedback: f32, mix: f32, damp: f32) {
         Delay::update(&self.delay, DelayParams { time_ms, feedback, mix, damp });
@@ -598,6 +610,113 @@ impl AudioEngine {
         }
         let v = &s.vocal;
         self.set_vocal(v[0] as i32, v[1], v[2], v[3], v[4]);
+    }
+
+    pub fn automation_routes(&self) -> Vec<(String, i32, f32, f32, bool)> {
+        self.automation.lock().map(|bank| (&*bank).into()).unwrap_or_default()
+    }
+
+    pub fn add_automation(&self, target: &str, shape: i32, rate: f32, depth: f32) -> bool {
+        let base = match target {
+            "gain_db" => self.input_gain_db(),
+            "output_gain_db" => self.output_gain_db(),
+            "pitch" => self.pitch_semitones(),
+            _ => return false,
+        };
+        let route = AutomationRoute::new(target, LfoShape::from_i32(shape), rate, depth);
+        if let Ok(mut bank) = self.automation.lock() {
+            bank.add(route);
+        } else {
+            return false;
+        }
+        if let Ok(mut bases) = self.automation_base.lock() {
+            bases.insert(target.to_string(), base);
+        }
+        true
+    }
+
+    pub fn remove_automation(&self, target: &str) -> bool {
+        if let Ok(mut bank) = self.automation.lock() {
+            bank.remove(target)
+        } else {
+            false
+        }
+    }
+
+    pub fn clear_automation(&self) {
+        if let Ok(mut bank) = self.automation.lock() { bank.clear(); }
+        let bases = match self.automation_base.lock() {
+            Ok(mut map) => std::mem::take(&mut *map),
+            Err(_) => BTreeMap::new(),
+        };
+        for (target, base) in bases {
+            match target.as_str() {
+                "gain_db" => self.set_input_gain_db(base),
+                "output_gain_db" => self.set_output_gain_db(base),
+                "pitch" => self.set_pitch_semitones(base),
+                _ => {}
+            }
+        }
+    }
+
+    pub fn control_bindings(&self) -> Vec<ControlBinding> {
+        self.control_map.lock().map(|m| m.bindings().to_vec()).unwrap_or_default()
+    }
+
+    pub fn bind_control(&self, channel: u8, controller: u8, target: &str, min: f32, max: f32) -> bool {
+        match target {
+            "gain_db" | "output_gain_db" | "pitch" => {}
+            _ => return false,
+        }
+        if let Ok(mut map) = self.control_map.lock() {
+            map.add(ControlBinding::new(channel, controller, target, min, max))
+        } else {
+            false
+        }
+    }
+
+    pub fn unbind_control(&self, channel: u8, controller: u8) -> bool {
+        self.control_map.lock().map(|mut m| m.remove_exact(channel, controller)).unwrap_or(false)
+    }
+
+    pub fn clear_controls(&self) {
+        if let Ok(mut map) = self.control_map.lock() { map.clear(); }
+    }
+
+    pub fn send_control(&self, channel: u8, controller: u8, value: f32) -> usize {
+        let message = ControlMessage::new(channel, controller, value);
+        let applied = match self.control_map.lock() {
+            Ok(map) => map.apply(&message),
+            Err(_) => return 0,
+        };
+        for (target, value) in &applied {
+            match target.as_str() {
+                "gain_db" => self.set_input_gain_db(*value),
+                "output_gain_db" => self.set_output_gain_db(*value),
+                "pitch" => self.set_pitch_semitones(*value),
+                _ => {}
+            }
+        }
+        applied.len()
+    }
+
+    pub fn tick_automation(&self, seconds: f32) {
+        let offsets = match self.automation.lock() {
+            Ok(mut bank) => bank.sample_all(seconds),
+            Err(_) => return,
+        };
+        for (target, offset) in offsets {
+            let base = self.automation_base.lock()
+                .ok()
+                .and_then(|b| b.get(&target).copied())
+                .unwrap_or(0.0);
+            match target.as_str() {
+                "gain_db" => self.set_input_gain_db(base + offset),
+                "output_gain_db" => self.set_output_gain_db(base + offset),
+                "pitch" => self.set_pitch_semitones(base + offset),
+                _ => {}
+            }
+        }
     }
 
     pub fn set_vocal(&self, mode: i32, carrier_hz: f32, vowel: f32, depth: f32, mix: f32) {

@@ -372,6 +372,21 @@ function boot() {
       try { await invoke('install_factory_presets', { dir: prDir() }); refreshPresets(); }
       catch(e) { toast('Install failed: ' + e); }
     };
+    document.getElementById('pr_export').onclick = async () => {
+      try {
+        const path = document.getElementById('pr_bundle').value;
+        await invoke('export_presets_to_file', { dir: prDir(), path });
+        toast('Presets exported', 'ok');
+      } catch(e) { toast('Export failed: ' + e); }
+    };
+    document.getElementById('pr_import').onclick = async () => {
+      try {
+        const path = document.getElementById('pr_bundle').value;
+        const n = await invoke('import_presets_from_file', { dir: prDir(), path, overwrite: false });
+        refreshPresets();
+        toast('Imported ' + n + ' presets', 'ok');
+      } catch(e) { toast('Import failed: ' + e); }
+    };
     refreshPresets();
     async function refreshToggles() {
       try {
@@ -567,6 +582,91 @@ function boot() {
         toast('Output ' + (box.checked ? 'muted' : 'unmuted'), 'ok');
       }
     });
+    async function refreshAutomation() {
+      const routes = await invoke('automation_routes');
+      const box = document.getElementById('auto_list');
+      if (!routes.length) { box.textContent = 'No routes'; return; }
+      box.textContent = '';
+      for (const [target, shape, rate, depth, enabled] of routes) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const label = document.createElement('span');
+        label.textContent = target + ' · ' + rate.toFixed(2) + ' Hz · ±' + depth.toFixed(1) + (enabled ? '' : ' (off)');
+        const remove = document.createElement('button');
+        remove.textContent = '\u00d7';
+        remove.onclick = async () => { await invoke('remove_automation', { target }); refreshAutomation(); };
+        row.append(label, remove);
+        box.appendChild(row);
+      }
+    }
+    document.getElementById('auto_rate').oninput = (e) => {
+      document.getElementById('auto_ratev').textContent = parseFloat(e.target.value).toFixed(2) + ' Hz';
+    };
+    document.getElementById('auto_depth').oninput = (e) => {
+      document.getElementById('auto_depthv').textContent = parseFloat(e.target.value).toFixed(1);
+    };
+    document.getElementById('auto_add').onclick = async () => {
+      const target = document.getElementById('auto_target').value;
+      const shape = parseInt(document.getElementById('auto_shape').value);
+      const rate = parseFloat(document.getElementById('auto_rate').value);
+      const depth = parseFloat(document.getElementById('auto_depth').value);
+      await invoke('add_automation', { target, shape, rate, depth });
+      await refreshAutomation();
+      toast('Automation route added', 'ok');
+    };
+    document.getElementById('auto_clear').onclick = async () => {
+      await invoke('clear_automation');
+      await refreshAutomation();
+      await syncAll();
+    };
+    let lastAutomationTick = performance.now();
+    setInterval(async () => {
+      const now = performance.now();
+      const seconds = Math.min(0.25, (now - lastAutomationTick) / 1000);
+      lastAutomationTick = now;
+      await invoke('tick_automation', { seconds });
+    }, 100);
+    async function refreshBindings() {
+      const bindings = await invoke('control_bindings');
+      const box = document.getElementById('ctl_list');
+      box.textContent = '';
+      if (!bindings.length) { box.textContent = 'No bindings'; return; }
+      for (const b of bindings) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const label = document.createElement('span');
+        label.textContent = 'ch' + b.channel + ' cc' + b.controller + ' -> ' + b.target;
+        const remove = document.createElement('button');
+        remove.textContent = '\u00d7';
+        remove.onclick = async () => { await invoke('unbind_control', { channel: b.channel, controller: b.controller }); refreshBindings(); };
+        row.append(label, remove);
+        box.appendChild(row);
+      }
+    }
+    document.getElementById('ctl_bind').onclick = async () => {
+      const channel = parseInt(document.getElementById('ctl_ch').value);
+      const controller = parseInt(document.getElementById('ctl_cc').value);
+      const target = document.getElementById('ctl_target').value;
+      const ranges = { gain_db: [-24, 24], output_gain_db: [-24, 24], pitch: [-24, 24] };
+      const [min, max] = ranges[target];
+      await invoke('bind_control', { channel, controller, target, min, max });
+      await refreshBindings();
+      toast('Control bound', 'ok');
+    };
+    document.getElementById('ctl_clear').onclick = async () => {
+      await invoke('clear_controls');
+      await refreshBindings();
+    };
+    document.getElementById('ctl_send').onclick = async () => {
+      const channel = parseInt(document.getElementById('ctl_ch').value);
+      const controller = parseInt(document.getElementById('ctl_cc').value);
+      const value = parseFloat(document.getElementById('ctl_value').value);
+      const n = await invoke('send_control', { channel, controller, value });
+      toast(n ? 'Control applied' : 'No binding for this CC', n ? 'ok' : 'error');
+      await syncAll();
+    };
+    refreshBindings();
+    refreshAutomation();
     refreshDevices();
     loadEq();
   }
